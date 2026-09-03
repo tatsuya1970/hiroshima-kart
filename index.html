@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
+  <title>Hiroshima Kart - 広島グランプリ</title>
+  <style>
+    html, body { margin: 0; padding: 0; overflow: hidden; background: #0b1a2a; font-family: "Segoe UI", "Hiragino Sans", "Noto Sans JP", sans-serif; }
+    canvas#game { display: block; width: 100vw; height: 100vh; }
+    #hud { position: fixed; inset: 0; pointer-events: none; color: #fff; text-shadow: 0 2px 4px rgba(0,0,0,.8); user-select: none; }
+    .box { position: absolute; }
+    #lap { top: 16px; left: 20px; font-size: 28px; font-weight: 800; }
+    #lap small { font-size: 16px; font-weight: 600; opacity: .9; }
+    #timer { top: 52px; left: 22px; font-size: 18px; font-variant-numeric: tabular-nums; }
+    #pos { top: 12px; right: 24px; font-size: 64px; font-weight: 900; line-height: 1; font-style: italic; color: #ffd83d; }
+    #pos small { font-size: 22px; }
+    #speed { bottom: 22px; right: 24px; font-size: 40px; font-weight: 800; font-style: italic; text-align: right; }
+    #speed small { font-size: 16px; font-weight: 600; }
+    #item { top: 20px; left: 50%; transform: translateX(-50%); width: 84px; height: 84px; border: 4px solid #fff; border-radius: 14px; background: rgba(0,0,0,.35); display: flex; align-items: center; justify-content: center; font-size: 46px; }
+    #minimap { position: absolute; bottom: 20px; left: 20px; width: 260px; height: 190px; background: rgba(0,0,0,.35); border-radius: 12px; }
+    #coins { bottom: 216px; left: 22px; font-size: 20px; font-weight: 700; color: #ffd83d; }
+    #landmark { top: 120px; left: 50%; transform: translateX(-50%); font-size: 40px; font-weight: 900; letter-spacing: .1em; opacity: 0; transition: opacity .3s; color: #fff; background: linear-gradient(90deg, transparent, rgba(200,0,40,.85), transparent); padding: 6px 80px; }
+    #center { top: 35%; left: 50%; transform: translate(-50%,-50%); font-size: 120px; font-weight: 900; font-style: italic; color: #ffd83d; opacity: 0; }
+    #wrong { top: 60%; left: 50%; transform: translateX(-50%); font-size: 28px; font-weight: 800; color: #ff5b5b; display: none; }
+    #overlay { position: fixed; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; background: radial-gradient(ellipse at center, rgba(15,40,70,.92), rgba(5,10,20,.97)); color: #fff; text-align: center; z-index: 10; }
+    #overlay h1 { font-size: 54px; margin: 0 0 6px; font-style: italic; letter-spacing: .05em; color: #ffd83d; text-shadow: 0 4px 0 #b6201f, 0 8px 20px rgba(0,0,0,.6); }
+    #overlay h2 { font-size: 20px; font-weight: 500; margin: 0 0 24px; opacity: .9; }
+    #overlay .route { font-size: 15px; opacity: .85; margin-bottom: 26px; line-height: 1.7; max-width: 640px; }
+    #overlay button { font-size: 24px; font-weight: 800; padding: 14px 48px; border: none; border-radius: 40px; background: linear-gradient(#ff5a5a, #c81e1e); color: #fff; cursor: pointer; box-shadow: 0 6px 0 #7d0f0f, 0 12px 24px rgba(0,0,0,.5); }
+    #overlay button:disabled { opacity: .5; cursor: default; }
+    #overlay .keys { margin-top: 26px; font-size: 14px; opacity: .8; line-height: 1.8; }
+    #overlay .credit { position: absolute; bottom: 14px; font-size: 12px; opacity: .6; }
+    #progress { width: 360px; height: 8px; background: rgba(255,255,255,.2); border-radius: 4px; margin-top: 18px; overflow: hidden; }
+    #progress div { height: 100%; width: 0%; background: #ffd83d; transition: width .2s; }
+    #results { display: none; }
+    #results table { margin: 0 auto 20px; border-collapse: collapse; font-size: 20px; }
+    #results td { padding: 6px 18px; }
+    #touch { position: fixed; bottom: 0; left: 0; right: 0; height: 160px; display: none; z-index: 5; }
+    #touch div { position: absolute; bottom: 16px; width: 70px; height: 70px; border-radius: 50%; background: rgba(255,255,255,.25); border: 2px solid rgba(255,255,255,.6); color: #fff; font-size: 26px; display: flex; align-items: center; justify-content: center; }
+    @media (pointer: coarse) { #touch { display: block; } #minimap { display: none; } }
+  </style>
+</head>
+<body>
+  <canvas id="game"></canvas>
+  <div id="hud">
+    <div id="lap" class="box">LAP <span id="lapNum">1</span><small>/<span id="lapTotal">2</span></small></div>
+    <div id="timer" class="box">0:00.00</div>
+    <div id="pos" class="box">1<small>st</small></div>
+    <div id="item" class="box"></div>
+    <div id="coins" class="box">🪙 0</div>
+    <canvas id="minimap" width="260" height="190"></canvas>
+    <div id="speed" class="box">0<small> km/h</small></div>
+    <div id="landmark" class="box"></div>
+    <div id="center" class="box"></div>
+    <div id="wrong" class="box">⚠ 逆走!</div>
+  </div>
+  <div id="touch">
+    <div id="tLeft" style="left:20px">◀</div>
+    <div id="tRight" style="left:110px">▶</div>
+    <div id="tItem" style="right:200px">★</div>
+    <div id="tDrift" style="right:110px">D</div>
+    <div id="tGas" style="right:20px">▲</div>
+  </div>
+  <div id="overlay">
+    <h1>HIROSHIMA KART</h1>
+    <h2>広島グランプリ — PLATEAU 3D都市モデル (国土交通省) で走る広島の街</h2>
+    <div class="route">広島駅 → 銀山町 → 八丁堀 → 紙屋町 → 原爆ドーム前 → 十日市 → 寺町 → 横川駅 → 新白島 → 城北 → 広島駅北口 → 広島駅<br /><span style="opacity:.75;font-size:13px">1周 約7.3km / 走行線は PLATEAU の道路データの上を通ります。道の中央を広島電鉄が走ります（接触するとスピン）</span></div>
+    <div id="results">
+      <table id="resultTable"></table>
+    </div>
+    <button id="startBtn" disabled>読み込み中...</button>
+    <div id="progress"><div id="progressBar"></div></div>
+    <div class="keys">↑/W: アクセル　↓/S: ブレーキ・バック　←→/A D: ハンドル<br />Shift/Space: ドリフト（離してミニターボ）　Ctrl/Enter: アイテム使用　C: カメラ切替　M: 音</div>
+    <div class="credit">3D都市モデル: 国土交通省 PLATEAU (広島市 2024年度, CC BY 4.0) / 建築物 LOD2 (実写テクスチャ)・LOD1・道路・地形を使用<br />広島電鉄・JR山陽本線・山陽新幹線は実在の位置に敷設し、車両が走行します</div>
+  </div>
+  <script type="module" src="/src/main.ts"></script>
+</body>
+</html>
