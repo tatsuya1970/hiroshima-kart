@@ -1,6 +1,6 @@
 # Hiroshima Kart — 広島グランプリ
 
-国土交通省 **PLATEAU** の 3D 都市モデル（広島市 2024 年度, CityGML）を使った、広島の街を走るマリオカート風レースゲームです。ブラウザ (three.js) で動作します。
+国土交通省 **PLATEAU** の 3D 都市モデル（広島市 2024 年度, CityGML）を使った、実在の広島の街を走るカートレースゲームです。ブラウザ (three.js) で動作します。
 
 ## コース
 
@@ -138,3 +138,14 @@ src/hud.ts        HUD・ミニマップ
 src/audio.ts      WebAudio 効果音
 src/main.ts       シーン構築・レース進行
 ```
+
+## ライセンス
+
+| 対象 | ライセンス |
+| --- | --- |
+| ソースコード (`src/`, `tools/`, `index.html`) | MIT — [LICENSE](LICENSE) |
+| 3D 都市データ (`public/data/`, `data/`) | CC BY 4.0 — [DATA_LICENSE.md](DATA_LICENSE.md) |
+
+データの出典は国土交通省「3D都市モデル（Project PLATEAU）広島市（2024年度）」です。加工内容の一覧は [DATA_LICENSE.md](DATA_LICENSE.md) にあります。
+
+本作品は任天堂株式会社とは一切関係がなく、同社が承認・後援するものでもありません。

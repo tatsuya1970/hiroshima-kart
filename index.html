@@ -32,6 +32,7 @@
     #overlay button:disabled { opacity: .5; cursor: default; }
     #overlay .keys { margin-top: 26px; font-size: 14px; opacity: .8; line-height: 1.8; }
     #overlay .credit { position: absolute; bottom: 14px; font-size: 12px; opacity: .6; }
+    #overlay .credit a { color: inherit; text-decoration: underline; }
     #progress { width: 360px; height: 8px; background: rgba(255,255,255,.2); border-radius: 4px; margin-top: 18px; overflow: hidden; }
     #progress div { height: 100%; width: 0%; background: #ffd83d; transition: width .2s; }
     #results { display: none; }
@@ -75,7 +76,7 @@
     <button id="startBtn" disabled>読み込み中...</button>
     <div id="progress"><div id="progressBar"></div></div>
     <div class="keys">↑/W: アクセル　↓/S: ブレーキ・バック　←→/A D: ハンドル<br />Shift/Space: ドリフト（離してミニターボ）　Ctrl/Enter: アイテム使用　C: カメラ切替　M: 音</div>
-    <div class="credit">3D都市モデル: 国土交通省 PLATEAU (広島市 2024年度, CC BY 4.0) / 建築物 LOD2 (実写テクスチャ)・LOD1・道路・地形を使用<br />広島電鉄・JR山陽本線・山陽新幹線は実在の位置に敷設し、車両が走行します</div>
+    <div class="credit">3D都市モデル: 国土交通省 PLATEAU「3D都市モデル（Project PLATEAU）広島市（2024年度）」を加工して作成 (<a href="https://creativecommons.org/licenses/by/4.0/deed.ja" target="_blank" rel="noopener">CC BY 4.0</a>) / 建築物 LOD2 (実写テクスチャ)・LOD1・道路・地形を使用<br />広島電鉄・JR山陽本線・山陽新幹線は実在の位置に敷設し、車両が走行します<br /><span style="opacity:.7">本作品は任天堂株式会社とは関係がありません</span></div>
   </div>
   <script type="module" src="/src/main.ts"></script>
 </body>
