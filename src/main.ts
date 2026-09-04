@@ -222,6 +222,10 @@ async function main() {
   // ---- ループ ----
   let last = performance.now();
   let titleAngle = 0;
+  // FPS 表示 (0.5 秒ごとに更新, ?nofps=1 で非表示)
+  const fpsEl = document.getElementById('fps')!;
+  let fpsFrames = 0, fpsSince = last;
+  if (params.get('nofps')) fpsEl.style.display = 'none';
   // デバッグ: steps=N で 1 フレームに N 回 (1/60s) 物理更新, ai=1 でプレイヤーも AI 操作
   const debugSteps = Number(params.get('steps') ?? 0);
   const debugAi = params.get('ai') === '1';
@@ -231,6 +235,13 @@ async function main() {
     const dtRaw = Math.min(0.05, (now - last) / 1000);
     last = now;
     const dt = dtRaw;
+    fpsFrames++;
+    if (now - fpsSince >= 500) {
+      const fps = Math.round(fpsFrames * 1000 / (now - fpsSince));
+      fpsEl.textContent = `${fps} fps`;
+      fpsEl.style.color = fps >= 50 ? '#7cff5a' : fps >= 30 ? '#ffd83d' : '#ff5b5b';
+      fpsFrames = 0; fpsSince = now;
+    }
     if (state === 'title') {
       titleAngle += dt * 0.15;
       const r = 140;
