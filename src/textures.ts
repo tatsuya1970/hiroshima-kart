@@ -383,6 +383,47 @@ export function makeStoneWallTexture(): THREE.Texture {
   return toTexture(c);
 }
 
+/** スタジアム外周のルーバー (木調の縦格子) */
+export function makeStadiumFacadeTexture(): THREE.Texture {
+  const [c, ctx] = canvas(256, 256);
+  // 奥に見えるコンコースの陰
+  ctx.fillStyle = '#3a332c'; ctx.fillRect(0, 0, 256, 256);
+  for (let i = 0; i < 240; i++) {
+    ctx.fillStyle = `rgba(0,0,0,${Math.random() * 0.3})`;
+    ctx.fillRect(Math.random() * 256, Math.random() * 256, 6, 4);
+  }
+  // 縦ルーバー (木調)
+  for (let x = 0; x < 256; x += 16) {
+    const t = Math.random() * 0.18;
+    ctx.fillStyle = `rgb(${Math.round(176 - t * 90)},${Math.round(132 - t * 70)},${Math.round(84 - t * 45)})`;
+    ctx.fillRect(x, 0, 11, 256);
+    // 木目
+    ctx.fillStyle = 'rgba(90,60,32,0.25)';
+    for (let k = 0; k < 5; k++) ctx.fillRect(x + 1 + Math.random() * 8, Math.random() * 256, 1, 30 + Math.random() * 60);
+    // 陰影
+    ctx.fillStyle = 'rgba(0,0,0,0.28)'; ctx.fillRect(x + 9, 0, 2, 256);
+    ctx.fillStyle = 'rgba(255,255,255,0.12)'; ctx.fillRect(x, 0, 2, 256);
+  }
+  return toTexture(c);
+}
+
+/** スタンドの観客席 (赤紫のシート) */
+export function makeStadiumSeatTexture(): THREE.Texture {
+  const [c, ctx] = canvas(256, 256);
+  ctx.fillStyle = '#2b2b30'; ctx.fillRect(0, 0, 256, 256);
+  // 段状に並ぶシート
+  for (let y = 0; y < 256; y += 16) {
+    ctx.fillStyle = 'rgba(0,0,0,0.4)'; ctx.fillRect(0, y, 256, 4);
+    for (let x = 0; x < 256; x += 10) {
+      const v = Math.random();
+      // 紫を基調に、まばらに白を混ぜて客席のムラを出す
+      ctx.fillStyle = v > 0.93 ? '#dcdce4' : v > 0.5 ? '#6f2f6a' : '#5a2456';
+      ctx.fillRect(x + 1, y + 5, 8, 9);
+    }
+  }
+  return toTexture(c);
+}
+
 export function makeCoinTexture(): THREE.Texture {
   const [c, ctx] = canvas(64, 64);
   ctx.fillStyle = '#f7c948'; ctx.beginPath(); ctx.arc(32, 32, 30, 0, Math.PI * 2); ctx.fill();

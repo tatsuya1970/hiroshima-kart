@@ -9,7 +9,7 @@ import { Hud, drawCourseMap } from './hud';
 import { InputManager } from './input';
 import { AudioSystem } from './audio';
 import { buildRail, type RailSystem } from './rail';
-import { buildGenbakuDome, buildHiroshimaCastle } from './landmarks';
+import { buildGenbakuDome, buildHiroshimaCastle, buildPeaceWing, landmarkBlocksBuilding } from './landmarks';
 import { loadLod2 } from './lod2';
 import { rng, lerp, clamp, WAYPOINTS, llToXZ } from './geo';
 import { resolveQuality, saveQuality, allPresets, type QualityLevel } from './quality';
@@ -126,7 +126,7 @@ async function main() {
   setProgress(0.56, `建物 ${bData.count} 棟を生成中...`);
   await nextFrame();
   let stat = '';
-  const bldgGroup = buildBuildings(bData, track, terrain, s => (stat = s), ring => rail.blocksBuilding(ring));
+  const bldgGroup = buildBuildings(bData, track, terrain, s => (stat = s), ring => rail.blocksBuilding(ring) || landmarkBlocksBuilding(ring));
   if (!params.get('nobldg')) scene.add(bldgGroup);
   setProgress(0.68, stat);
   await nextFrame();
@@ -145,6 +145,7 @@ async function main() {
   if (!params.get('nodome')) {
     scene.add(buildGenbakuDome(terrain));
     scene.add(buildHiroshimaCastle(terrain));
+    scene.add(buildPeaceWing(terrain));
   }
   scene.add(track.buildMesh());
 

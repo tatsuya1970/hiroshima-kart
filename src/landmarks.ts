@@ -4,7 +4,168 @@ import * as THREE from 'three';
 import railData from '../data/rail.json';
 import { llToXZ } from './geo';
 import type { Terrain } from './terrain';
-import { makeDomeBrickTexture, makeRuinStoneTexture, makeCastleWallTexture, makeCastleRoofTexture, makeStoneWallTexture } from './textures';
+import { makeDomeBrickTexture, makeRuinStoneTexture, makeCastleWallTexture, makeCastleRoofTexture, makeStoneWallTexture, makeStadiumFacadeTexture, makeStadiumSeatTexture } from './textures';
+
+/**
+ * ランドマークの専用モデルと重なる PLATEAU 建物を除く。
+ *
+ * tools/convert_citygml.mjs も同じ除外を行うが、あちらはデータ生成時にしか効かない。
+ * エディオンピースウィングは public/data/ の生成後に追加したため、実行時にも判定する。
+ */
+export function landmarkBlocksBuilding(ring: number[]): boolean {
+  for (const info of Object.values((railData as any).landmarks) as any[]) {
+    if (!info.excludeRadius) continue;
+    const [lx, lz] = llToXZ(info.lat, info.lon);
+    const r2 = info.excludeRadius * info.excludeRadius;
+    for (let k = 0; k + 1 < ring.length; k += 2) {
+      const dx = ring[k] - lx, dz = ring[k + 1] - lz;
+      if (dx * dx + dz * dz < r2) return true;
+    }
+  }
+  return false;
+}
+
+/**
+ * 敷地の基準高さ。中心が水面判定になる場所があるので、半径 r の外周から
+ * 陸地の点だけを拾って中央値を取る。
+ */
+function siteLevel(terrain: Terrain, x: number, z: number, r: number): number {
+  const hs: number[] = [];
+  for (let a = 0; a < 360; a += 15) {
+    const px = x + Math.cos((a * Math.PI) / 180) * r, pz = z + Math.sin((a * Math.PI) / 180) * r;
+    if (!terrain.isWater(px, pz)) hs.push(terrain.groundHeight(px, pz));
+  }
+  if (!hs.length) return terrain.groundHeight(x, z);
+  hs.sort((p, q) => p - q);
+  return hs[Math.floor(hs.length / 2)];
+}
+
+/** 角の丸い長方形 (超楕円)。p が小さいほど角ばる。 */
+function superellipse(rx: number, rz: number, steps: number, p = 0.55): [number, number][] {
+  const pts: [number, number][] = [];
+  for (let i = 0; i < steps; i++) {
+    const t = (i / steps) * Math.PI * 2;
+    const c = Math.cos(t), s = Math.sin(t);
+    pts.push([rx * Math.sign(c) * Math.abs(c) ** p, rz * Math.sign(s) * Math.abs(s) ** p]);
+  }
+  return pts;
+}
+
+/**
+ * 2 本の閉パスの間を帯で張る。スタジアムは外からも内からも見えるので
+ * DoubleSide で作り、面の向きに依存しないようにする。
+ */
+function ribbon(
+  a: [number, number][], ay: number, b: [number, number][], by: number,
+  mat: THREE.Material, uRepeat: number, vRepeat: number,
+): THREE.Mesh {
+  const n = a.length;
+  const pos: number[] = [], uv: number[] = [], idx: number[] = [];
+  for (let i = 0; i <= n; i++) {
+    const k = i % n;
+    pos.push(a[k][0], ay, a[k][1]);
+    pos.push(b[k][0], by, b[k][1]);
+    const u = (i / n) * uRepeat;
+    uv.push(u, 0, u, vRepeat);
+    if (i < n) { const q = i * 2; idx.push(q, q + 2, q + 1, q + 1, q + 2, q + 3); }
+  }
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  geo.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
+  geo.setIndex(idx);
+  geo.computeVertexNormals();
+  const mesh = new THREE.Mesh(geo, mat);
+  mesh.castShadow = true; mesh.receiveShadow = true;
+  return mesh;
+}
+
+/**
+ * エディオンピースウィング広島 (2024年2月開業のサッカー専用スタジアム)。
+ *
+ * PLATEAU 広島市 2024年度の建築物モデルには含まれていない。該当メッシュの
+ * CityGML を確認したところ、この位置の半径 250m 以内で最大の建物は 54m x 64m で、
+ * スタジアム (約 200m x 160m) は存在しなかった。測量時点が開業前と思われる。
+ * そのため原爆ドーム・広島城と同じく独自にモデリングしている。寸法は概略値。
+ */
+export function buildPeaceWing(terrain: Terrain): THREE.Group {
+  const info = (railData as any).landmarks.peaceWing;
+  const [x, z] = llToXZ(info.lat, info.lon);
+  // 中央公園のこの一帯は平坦で標高が低く、terrain が河川と誤判定する
+  // (DEM の低標高部を水面として扱っているため)。そのまま置くと足元が水面に
+  // なるので、高さは周囲の陸地から取り、下に敷地の板を敷いて隠す。
+  const base = siteLevel(terrain, x, z, 130);
+  const g = new THREE.Group();
+  g.position.set(x, base, z);
+  g.rotation.y = -(info.headingDeg * Math.PI) / 180;
+
+  // 敷地 (スタジアムより一回り大きい平場)
+  const siteShape = new THREE.Shape();
+  superellipse(150, 124, 64, 0.75).forEach(([px, pz], i) => i ? siteShape.lineTo(px, pz) : siteShape.moveTo(px, pz));
+  siteShape.closePath();
+  // 中央公園なので芝寄りの色にして、誤判定された水面をまたいでも浮かないようにする
+  const site = new THREE.Mesh(new THREE.ShapeGeometry(siteShape), new THREE.MeshLambertMaterial({ color: 0x7f8a63 }));
+  site.rotation.x = -Math.PI / 2; // +π/2 だと法線が下を向いて上から見えなくなる
+  site.position.y = 0.15;
+  site.receiveShadow = true;
+  g.add(site);
+
+  const N = 96;
+  const facadeMat = new THREE.MeshLambertMaterial({ map: makeStadiumFacadeTexture(), side: THREE.DoubleSide });
+  const seatMat = new THREE.MeshLambertMaterial({ map: makeStadiumSeatTexture(), side: THREE.DoubleSide });
+  const roofMat = new THREE.MeshLambertMaterial({ color: 0xd6d9dc, side: THREE.DoubleSide });
+  const trimMat = new THREE.MeshLambertMaterial({ color: 0x54585c, side: THREE.DoubleSide });
+
+  // 外周 (ルーバーの壁) / スタンド上端 / ピッチ際
+  const outer = superellipse(98, 78, N);
+  const roofIn = superellipse(74, 56, N);
+  const standTop = superellipse(64, 46, N);
+  const pitchEdge = superellipse(57, 39, N);
+
+  const H_FACADE = 30, H_STAND = 23, H_PITCH = 1.2, H_ROOF = 31.5;
+
+  // 外周のルーバー壁
+  g.add(ribbon(outer, 0, outer, H_FACADE, facadeMat, 26, 4));
+  // 屋根 (外周から内側へ張り出す) と、その先端の見切り
+  g.add(ribbon(outer, H_ROOF, roofIn, H_ROOF, roofMat, 1, 1));
+  g.add(ribbon(outer, H_FACADE, outer, H_ROOF, trimMat, 1, 1));
+  g.add(ribbon(roofIn, H_ROOF, roofIn, H_ROOF - 1.6, trimMat, 1, 1));
+  // スタンド (ピッチ際から上端まで登る客席)
+  g.add(ribbon(pitchEdge, H_PITCH, standTop, H_STAND, seatMat, 40, 8));
+  // スタンド上端から外周壁の内側へ渡るコンコースの天井
+  g.add(ribbon(standTop, H_STAND, outer, H_STAND + 2.5, trimMat, 1, 1));
+
+  // ピッチ
+  const pitch = new THREE.Mesh(
+    new THREE.PlaneGeometry(105, 68),
+    new THREE.MeshLambertMaterial({ color: 0x3f8f43 }),
+  );
+  pitch.rotation.x = -Math.PI / 2;
+  pitch.position.y = H_PITCH;
+  pitch.receiveShadow = true;
+  g.add(pitch);
+  // 芝のストライプ
+  for (let i = 0; i < 8; i++) {
+    const stripe = new THREE.Mesh(
+      new THREE.PlaneGeometry(105 / 8, 68),
+      new THREE.MeshLambertMaterial({ color: i % 2 ? 0x469a4b : 0x38833c }),
+    );
+    stripe.rotation.x = -Math.PI / 2;
+    stripe.position.set(-52.5 + (i + 0.5) * (105 / 8), H_PITCH + 0.02, 0);
+    g.add(stripe);
+  }
+
+  // 照明塔 (屋根の四隅)
+  const lampMat = new THREE.MeshPhongMaterial({ color: 0xf2f4f6, emissive: 0x2a2a22, shininess: 60 });
+  for (const [sx, sz] of [[1, 1], [1, -1], [-1, 1], [-1, -1]] as [number, number][]) {
+    const lamp = new THREE.Mesh(new THREE.BoxGeometry(14, 1.2, 3), lampMat);
+    lamp.position.set(sx * 44, H_ROOF - 1.2, sz * 34);
+    lamp.rotation.y = sx * sz > 0 ? 0.5 : -0.5;
+    lamp.castShadow = true;
+    g.add(lamp);
+  }
+
+  return g;
+}
 
 /**
  * 原爆ドーム。
