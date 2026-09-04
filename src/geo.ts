@@ -36,6 +36,15 @@ export interface CoursePath {
 }
 export const COURSE_PATH: CoursePath = coursePathJson as unknown as CoursePath;
 
+/**
+ * public/ 配下のアセット URL。
+ * GitHub Pages のプロジェクトページのようにサブパス配信される場合があるので、
+ * 絶対パスを直書きせず Vite の BASE_URL を基準にする。
+ */
+export function assetUrl(path: string): string {
+  return import.meta.env.BASE_URL + path.replace(/^\//, '');
+}
+
 export const clamp = (v: number, a: number, b: number) => Math.max(a, Math.min(b, v));
 export const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
 

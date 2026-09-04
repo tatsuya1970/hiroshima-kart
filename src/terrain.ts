@@ -1,5 +1,6 @@
 // 地形 (PLATEAU DEM) と地面テクスチャ (PLATEAU 道路面をラスタライズ)
 import * as THREE from 'three';
+import { assetUrl } from './geo';
 
 export interface TerrainMeta {
   w: number;
@@ -157,9 +158,9 @@ export class Terrain {
 }
 
 export async function loadTerrain(onProgress?: (p: number) => void): Promise<Terrain> {
-  const meta: TerrainMeta = await (await fetch('/data/terrain.json')).json();
+  const meta: TerrainMeta = await (await fetch(assetUrl('data/terrain.json'))).json();
   onProgress?.(0.5);
-  const buf = await (await fetch('/data/terrain.bin')).arrayBuffer();
+  const buf = await (await fetch(assetUrl('data/terrain.bin'))).arrayBuffer();
   onProgress?.(1);
   return new Terrain(meta, new Int16Array(buf));
 }

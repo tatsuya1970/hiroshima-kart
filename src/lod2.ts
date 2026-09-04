@@ -1,6 +1,7 @@
 // PLATEAU 建築物 LOD2 — 実写テクスチャ (航空写真由来) をアトラスで貼った建物
 import * as THREE from 'three';
 import { atlasFile, type QualityPreset } from './quality';
+import { assetUrl } from './geo';
 
 export interface Lod2Meta {
   vertexCount: number;
@@ -11,9 +12,9 @@ export interface Lod2Meta {
 }
 
 export async function loadLod2(preset: QualityPreset, onProgress?: (p: number, label?: string) => void): Promise<{ group: THREE.Group; meta: Lod2Meta; triangles: number }> {
-  const meta: Lod2Meta = await (await fetch('/data/lod2.json')).json();
+  const meta: Lod2Meta = await (await fetch(assetUrl('data/lod2.json'))).json();
   onProgress?.(0.1, 'LOD2 形状を読み込み中...');
-  const buf = await (await fetch('/data/lod2.bin')).arrayBuffer();
+  const buf = await (await fetch(assetUrl('data/lod2.bin'))).arrayBuffer();
   const n = meta.vertexCount;
   const pos = new Float32Array(buf, 0, n * 3);
   const uv = new Float32Array(buf, n * 3 * 4, n * 2);
@@ -25,7 +26,7 @@ export async function loadLod2(preset: QualityPreset, onProgress?: (p: number, l
     if (g.count === 0) return;
     const name = meta.atlases[g.atlas];
     // 低画質時は 2048px 版を使う。未生成の環境では元の 4096px に戻す
-    const load = (f: string) => new Promise<THREE.Texture>((res, rej) => loader.load(`/data/${f}`, res, undefined, rej));
+    const load = (f: string) => new Promise<THREE.Texture>((res, rej) => loader.load(assetUrl(`data/${f}`), res, undefined, rej));
     const tex = await load(atlasFile(name, preset)).catch(e => {
       if (!preset.halfAtlas) throw e;
       console.warn(`${atlasFile(name, preset)} が無いので ${name} を使います (npm run data:lq で生成できます)`);

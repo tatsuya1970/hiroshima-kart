@@ -11,7 +11,7 @@ import { AudioSystem } from './audio';
 import { buildRail, type RailSystem } from './rail';
 import { buildGenbakuDome, buildHiroshimaCastle, buildPeaceWing, landmarkBlocksBuilding } from './landmarks';
 import { loadLod2 } from './lod2';
-import { rng, lerp, clamp, WAYPOINTS, llToXZ } from './geo';
+import { rng, lerp, clamp, assetUrl, WAYPOINTS, llToXZ } from './geo';
 import { resolveQuality, saveQuality, allPresets, type QualityLevel } from './quality';
 
 const LAPS = 2;
@@ -107,8 +107,8 @@ async function main() {
   const terrain: Terrain = await loadTerrain(p => setProgress(0.05 + p * 0.15));
   setProgress(0.2, '建物データ読み込み中...');
   const [bData, rData] = await Promise.all([
-    (await fetch('/data/buildings.json')).json() as Promise<BuildingsData>,
-    (await fetch('/data/roads.json')).json() as Promise<{ items: number[][] }>,
+    (await fetch(assetUrl('data/buildings.json'))).json() as Promise<BuildingsData>,
+    (await fetch(assetUrl('data/roads.json'))).json() as Promise<{ items: number[][] }>,
   ]);
   setProgress(0.4, 'コース生成中...');
   await nextFrame();

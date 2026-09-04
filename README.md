@@ -81,6 +81,23 @@ npm run dev             # http://localhost:5180/
 
 `public/data/` に生成済みデータが含まれていれば、`npm run dev` だけで遊べます。
 
+## デプロイ
+
+`main` に push すると GitHub Actions が GitHub Pages へ公開します（`.github/workflows/deploy.yml`）。
+
+公開先: **https://tatsuya1970.github.io/hiroshima-kart/**
+
+プロジェクトページはサブパス配信なので `base` が要ります。`vite preview` は `command` が `'serve'` 扱いになり、`command === 'build'` で分岐するとビルド成果物を root で配信してしまって検証にならないため、環境変数で渡しています。
+
+```bash
+BASE_PATH=/hiroshima-kart/ npm run build
+BASE_PATH=/hiroshima-kart/ npm run preview   # http://127.0.0.1:4173/hiroshima-kart/
+```
+
+`public/` 配下のアセットは絶対パスで直書きせず、`src/geo.ts` の `assetUrl()` が `import.meta.env.BASE_URL` を基準に解決します。新しくデータを読む箇所を足すときはこれを使ってください。
+
+初回ロードは「中」画質で約 12MB（2048px アトラス 3.2MB ＋ 建物・地形・道路）。GitHub Pages の帯域ソフト制限は月 100GB です。
+
 ## 操作
 
 | キー | 操作 |
