@@ -23,18 +23,30 @@
     #landmark { top: 120px; left: 50%; transform: translateX(-50%); font-size: 40px; font-weight: 900; letter-spacing: .1em; opacity: 0; transition: opacity .3s; color: #fff; background: linear-gradient(90deg, transparent, rgba(200,0,40,.85), transparent); padding: 6px 80px; }
     #center { top: 35%; left: 50%; transform: translate(-50%,-50%); font-size: 120px; font-weight: 900; font-style: italic; color: #ffd83d; opacity: 0; }
     #wrong { top: 60%; left: 50%; transform: translateX(-50%); font-size: 28px; font-weight: 800; color: #ff5b5b; display: none; }
-    #overlay { position: fixed; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; background: radial-gradient(ellipse at center, rgba(15,40,70,.92), rgba(5,10,20,.97)); color: #fff; text-align: center; z-index: 10; }
+    #overlay { position: fixed; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: flex-start; background: radial-gradient(ellipse at center, rgba(15,40,70,.92), rgba(5,10,20,.97)); color: #fff; text-align: center; z-index: 10; padding: 20px 16px; overflow-y: auto; }
+    /* justify-content: center だと縦が足りないとき上端が切れてスクロールで戻れない。
+       auto マージンなら余裕があるときだけ中央寄せになる。 */
+    #overlay > *:first-child { margin-top: auto; }
+    #overlay > *:last-child { margin-bottom: auto; }
     #overlay h1 { font-size: 54px; margin: 0 0 6px; font-style: italic; letter-spacing: .05em; color: #ffd83d; text-shadow: 0 4px 0 #b6201f, 0 8px 20px rgba(0,0,0,.6); }
     #overlay h2 { font-size: 20px; font-weight: 500; margin: 0 0 24px; opacity: .9; }
     #overlay .route { font-size: 15px; opacity: .85; margin-bottom: 26px; line-height: 1.7; max-width: 640px; }
-    #titleMap { width: min(560px, 84vw); height: auto; margin: 0 0 14px; }
+    /* 縦の狭い窓でも収まるよう vh でも上限をかける (アスペクト比は width 基準で保たれる) */
+    #titleMap { width: min(560px, 84vw, 62vh); height: auto; margin: 0 0 14px; }
     #overlay button { font-size: 24px; font-weight: 800; padding: 14px 48px; border: none; border-radius: 40px; background: linear-gradient(#ff5a5a, #c81e1e); color: #fff; cursor: pointer; box-shadow: 0 6px 0 #7d0f0f, 0 12px 24px rgba(0,0,0,.5); }
     #overlay button:disabled { opacity: .5; cursor: default; }
     #overlay .keys { margin-top: 26px; font-size: 14px; opacity: .8; line-height: 1.8; }
-    #overlay .credit { position: absolute; bottom: 14px; font-size: 12px; opacity: .6; }
+    /* 絶対配置だと行数が増えたときに .keys と重なるので通常フローに置く */
+    #overlay .credit { margin-top: 22px; font-size: 12px; opacity: .6; max-width: 900px; line-height: 1.7; }
     #overlay .credit a { color: inherit; text-decoration: underline; }
     #progress { width: 360px; height: 8px; background: rgba(255,255,255,.2); border-radius: 4px; margin-top: 18px; overflow: hidden; }
     #progress div { height: 100%; width: 0%; background: #ffd83d; transition: width .2s; }
+    #quality { margin-top: 16px; font-size: 13px; opacity: .85; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; justify-content: center; }
+    /* #overlay button の赤いピルを打ち消す (詳細度を上げて後勝ちにする) */
+    #overlay #quality button { font-size: 13px; font-weight: 600; padding: 5px 14px; border-radius: 14px; background: rgba(255,255,255,.12); color: #fff; border: 1px solid rgba(255,255,255,.25); box-shadow: none; cursor: pointer; }
+    #overlay #quality button:hover { background: rgba(255,255,255,.22); }
+    #overlay #quality button[aria-pressed="true"] { background: #ffd83d; color: #1b1b1b; border-color: #ffd83d; }
+    #qualityNote { opacity: .6; font-size: 12px; }
     #results { display: none; }
     #results table { margin: 0 auto 20px; border-collapse: collapse; font-size: 20px; }
     #results td { padding: 6px 18px; }
@@ -75,6 +87,10 @@
     </div>
     <button id="startBtn" disabled>読み込み中...</button>
     <div id="progress"><div id="progressBar"></div></div>
+    <div id="quality">
+      画質 <span id="qualityBtns"></span>
+      <span id="qualityNote">環境に合わせて自動選択しています。カクつく場合は下げてください</span>
+    </div>
     <div class="keys">↑/W: アクセル　↓/S: ブレーキ・バック　←→/A D: ハンドル<br />Shift/Space: ドリフト（離してミニターボ）　Ctrl/Enter: アイテム使用　C: カメラ切替　M: 音</div>
     <div class="credit">3D都市モデル: 国土交通省 PLATEAU「3D都市モデル（Project PLATEAU）広島市（2024年度）」を加工して作成 (<a href="https://creativecommons.org/licenses/by/4.0/deed.ja" target="_blank" rel="noopener">CC BY 4.0</a>) / 建築物 LOD2 (実写テクスチャ)・LOD1・道路・地形を使用<br />広島電鉄・JR山陽本線・山陽新幹線は実在の位置に敷設し、車両が走行します<br /><span style="opacity:.7">本作品は任天堂株式会社とは関係がありません</span></div>
   </div>

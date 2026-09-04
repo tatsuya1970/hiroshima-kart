@@ -12,6 +12,7 @@ import { buildRail, type RailSystem } from './rail';
 import { buildGenbakuDome, buildHiroshimaCastle } from './landmarks';
 import { loadLod2 } from './lod2';
 import { rng, lerp, clamp, WAYPOINTS, llToXZ } from './geo';
+import { resolveQuality, saveQuality, allPresets, type QualityLevel } from './quality';
 
 const LAPS = 2;
 const RACERS: RacerDef[] = [
@@ -27,6 +28,29 @@ const RACERS: RacerDef[] = [
 
 type State = 'loading' | 'title' | 'countdown' | 'race' | 'finish';
 
+/**
+ * タイトル画面の画質ボタン。アトラスの解像度が変わるので、切り替えは再読み込みで反映する。
+ * 読み込み中でも押せるようにしてある (遅い環境で待たされずに下げられる)。
+ */
+function setupQualityButtons(current: QualityLevel): void {
+  const host = document.getElementById('qualityBtns');
+  if (!host) return;
+  for (const p of allPresets()) {
+    const b = document.createElement('button');
+    b.textContent = p.label;
+    b.setAttribute('aria-pressed', String(p.level === current));
+    b.addEventListener('click', () => {
+      if (p.level === current) return;
+      saveQuality(p.level);
+      // ?q= が付いていると localStorage より優先されるので外してから再読み込みする
+      const url = new URL(location.href);
+      url.searchParams.delete('q');
+      location.replace(url.toString());
+    });
+    host.appendChild(b);
+  }
+}
+
 async function main() {
   const canvas = document.getElementById('game') as HTMLCanvasElement;
   const startBtn = document.getElementById('startBtn') as HTMLButtonElement;
@@ -38,18 +62,22 @@ async function main() {
 
   // ---- レンダラー / シーン ----
   const dbg = new URLSearchParams(location.search);
-  const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
-  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));
+  const quality = resolveQuality(dbg);
+  console.log(`画質: ${quality.level} (アトラス ${quality.halfAtlas ? '2048' : '4096'}px / 影 ${quality.shadows ? 'on' : 'off'})`);
+  setupQualityButtons(quality.level);
+  // 低画質では MSAA も切る (内蔵 GPU では帯域を食う)
+  const renderer = new THREE.WebGLRenderer({ canvas, antialias: quality.level !== 'low', powerPreference: 'high-performance' });
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio, quality.maxPixelRatio));
   renderer.setSize(window.innerWidth, window.innerHeight);
-  renderer.shadowMap.enabled = !dbg.get('noshadow');
+  renderer.shadowMap.enabled = quality.shadows && !dbg.get('noshadow');
   renderer.shadowMap.type = THREE.PCFShadowMap;
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
   renderer.toneMappingExposure = 1.05;
   const scene = new THREE.Scene();
   const skyColor = new THREE.Color(0x9fd3f5);
   scene.background = skyColor;
-  scene.fog = new THREE.Fog(0xbfdcf0, 400, 4200);
-  const camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.5, 6000);
+  scene.fog = new THREE.Fog(0xbfdcf0, 400, quality.drawDistance);
+  const camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.5, quality.drawDistance * 1.45);
   window.addEventListener('resize', () => { renderer.setSize(window.innerWidth, window.innerHeight); camera.aspect = window.innerWidth / window.innerHeight; camera.updateProjectionMatrix(); });
 
   const hemi = new THREE.HemisphereLight(0xcfe8ff, 0x8a7f6a, 0.9);
@@ -57,7 +85,7 @@ async function main() {
   const sun = new THREE.DirectionalLight(0xfff2dc, 2.2);
   sun.position.set(-300, 500, -200);
   sun.castShadow = true;
-  sun.shadow.mapSize.set(2048, 2048);
+  sun.shadow.mapSize.set(quality.shadowMapSize, quality.shadowMapSize);
   sun.shadow.camera.near = 50; sun.shadow.camera.far = 1400;
   sun.shadow.camera.left = -160; sun.shadow.camera.right = 160; sun.shadow.camera.top = 160; sun.shadow.camera.bottom = -160;
   sun.shadow.bias = -0.0008;
@@ -103,9 +131,9 @@ async function main() {
   setProgress(0.68, stat);
   await nextFrame();
   // PLATEAU LOD2 (実写テクスチャ)
-  if (!params.get('nolod2')) {
+  if (quality.lod2 && !params.get('nolod2')) {
     try {
-      const lod2 = await loadLod2((p, label) => setProgress(0.68 + p * 0.24, label));
+      const lod2 = await loadLod2(quality, (p, label) => setProgress(0.68 + p * 0.24, label));
       scene.add(lod2.group);
       console.log(`LOD2: ${lod2.triangles} 三角形 / アトラス ${lod2.meta.atlases.length} 枚`);
     } catch (e) {

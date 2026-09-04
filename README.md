@@ -88,6 +88,38 @@ npm run dev             # http://localhost:5180/
 
 アイテム: キノコ（加速）、バナナ（後方に設置）、ミドリこうら（前方に発射・壁で反射）、スター（無敵）。コインを取ると最高速が少し上がります。
 
+## 画質プリセット
+
+公開環境では GPU を選べないため、タイトル画面に画質切り替えを置いています。初回は WebGL の `WEBGL_debug_renderer_info` から GPU 名を読んで自動選択し、以後は localStorage に保存します（`src/quality.ts`）。アトラスの解像度が変わるので、切り替えはページ再読み込みで反映されます。
+
+| プリセット | アトラス | 影 | 解像度上限 | 描画距離 |
+| --- | --- | --- | --- | --- |
+| 高（専用GPU向け） | 4096px | 2048 シャドウマップ | DPR 1.5 | 4200m |
+| 中（内蔵GPU向け） | 2048px | 1024 シャドウマップ | DPR 1.0 | 3000m |
+| 低（最軽量） | 2048px | なし | DPR 1.0 | 2000m |
+
+自動判定は、ソフトウェアラスタライザとモバイルを「低」、Intel UHD/Iris など内蔵 GPU を「中」、GeForce/Radeon RX/Apple M 系を「高」に割り当てます。
+
+**最大のコストは三角形数ではなくテクスチャ VRAM です。** LOD2 は 68,400 三角形しかなく、ジオメトリはマージ済みでドローコールも少ない一方、4096px のアトラス 6 枚は非圧縮 RGBA + ミップで約 511MB を占めます。2048px 版に落とすと約 128MB になり、転送量も 15.3MB → 3.2MB に減ります。
+
+低画質用のアトラスは既存の 4096px 版から生成します（PLATEAU の元データは不要）。UV はアトラス内の正規化座標なので、画像を縮小しても `lod2.bin` 側は変更不要です。
+
+```bash
+npm run data:lq            # public/data/lod2_atlas_N_2k.jpg を生成
+```
+
+### 実測値
+
+Intel UHD Graphics（内蔵 GPU）/ 1920×1080 / DPR 1.5 / 本番ビルド / 全 AI 走行時の中央値:
+
+| プリセット | fps | 読み込み |
+| --- | --- | --- |
+| 高 | 16 | 4.6s |
+| 中 | 28 | 4.7s |
+| 低 | 35 | 3.9s |
+
+同じシーンを GeForce RTX 3070 Laptop で動かすと「高」でも 93fps 出ます。内蔵 GPU との差が大きいので、公開時は自動判定に任せるのが前提です。なお連続計測すると熱で 3 割ほど落ちるため、上表は各プリセットを冷えた状態で 1 番目に測った値です。
+
 ## 開発用デバッグ
 
 URL パラメータでカウントダウン無しに任意地点から開始できます。
@@ -103,6 +135,8 @@ http://localhost:5180/?debug=1&photo=34.39564,132.45362,14,75,200  # 指定し�
 
 画面左上（タイマーの下）に FPS を常時表示します。50 以上で緑、30 以上で黄、それ未満は赤。`nofps=1` で非表示にできます。
 
+`?q=low` `?q=medium` `?q=high` で画質プリセットを固定できます（自動判定と localStorage より優先）。
+
 `cam` は 0: 追従, 1: 遠め, 2: ボンネット, 3: 俯瞰。`tools/shots.mjs` と `tools/airace.mjs` は Playwright (SwiftShader) でこれらを自動実行します。
 
 ## 構成
@@ -116,6 +150,7 @@ tools/convert_citygml.mjs  CityGML → buildings.json / roads.json / terrain.bin
 tools/convert_lod2.mjs     CityGML → lod2.bin / lod2.json (LOD2 実写テクスチャ)
 tools/download_lod2_tex.mjs LOD2 テクスチャ画像のダウンロード
 tools/build_lod2_atlas.mjs テクスチャアトラス生成 (ベタ塗り面の補正込み)
+tools/build_lod2_atlas_lq.mjs 低画質用 2048px アトラス生成 (既存アトラスから)
 tools/build_course.mjs     走行線を PLATEAU の道路面の上に載せる (A* 探索)
 tools/export_course_geo.mjs コースを GeoJSON / KML / GPX / OSM 地図ページへ書き出す
 tools/screenshot.mjs       Playwright による動作確認スクリーンショット
@@ -130,6 +165,7 @@ src/buildings.ts  LOD1 建物メッシュ (テクスチャ 6 種)
 src/textures.ts   プロシージャルテクスチャ
 src/track.ts      スプライン・路面・高架・欄干・看板・最寄点検索
 src/lod2.ts       LOD2 実写テクスチャ建物の読み込み
+src/quality.ts    画質プリセット (GPU 自動判定・localStorage 保存)
 src/rail.ts       広電・JR・新幹線の線路と走行車両
 src/landmarks.ts  原爆ドーム
 src/kart.ts       カート物理・モデル・AI
