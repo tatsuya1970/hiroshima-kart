@@ -22,6 +22,21 @@ function samplePath(pts: { lat: number; lon: number }[], step: number, closed = 
   return curve.getSpacedPoints(n);
 }
 
+/**
+ * コース上の 2 点を結ぶ点列の添字を返す。コースは閉ループなので短い側を辿る。
+ * 端点は含まない (呼び出し側が停留場の座標を入れるため)。
+ */
+function courseArc(track: Track, i0: number, i1: number): number[] {
+  const n = track.n;
+  const fwd = (i1 - i0 + n) % n;
+  const back = (i0 - i1 + n) % n;
+  const step = fwd <= back ? 1 : -1;
+  const len = Math.min(fwd, back);
+  const out: number[] = [];
+  for (let k = 1; k < len; k++) out.push((i0 + step * k + n) % n);
+  return out;
+}
+
 export class RailLine {
   kind: Kind;
   pts: RailPoint[] = [];
@@ -228,12 +243,27 @@ export function buildRail(terrain: Terrain, track: Track): RailSystem {
     const nr = track.nearest(x, z);
     if (nr.dist < 130) {
       const i = nr.idx;
-      return { ...st, x: track.px[i], z: track.pz[i], onCourse: true };
+      return { ...st, x: track.px[i], z: track.pz[i], idx: i, onCourse: true };
     }
-    return { ...st, x, z, onCourse: false };
+    return { ...st, x, z, idx: -1, onCourse: false };
   });
   const tramRaw = (() => {
-    const v = tramStops.map(s => new THREE.Vector3(s.x, 0, s.z));
+    // 停留場だけを通る曲線にすると、停留場の間でカーブの内側を突っ切って道路の
+    // 中央から外れる。両端がコース上にある区間は、コースの点列 (PLATEAU の道路面に
+    // 載せた 2m 間隔の走行線 = 道路の中央) をそのまま制御点として辿る。
+    const v: THREE.Vector3[] = [];
+    for (let s = 0; s < tramStops.length; s++) {
+      const cur = tramStops[s];
+      v.push(new THREE.Vector3(cur.x, 0, cur.z));
+      const nxt = tramStops[s + 1];
+      if (!nxt) break;
+      if (!cur.onCourse || !nxt.onCourse) continue;
+      const arc = courseArc(track, cur.idx, nxt.idx);
+      // コースが遠回りしている区間 (実際の軌道は別の道を通る) では使わない
+      const straight = Math.hypot(nxt.x - cur.x, nxt.z - cur.z);
+      if (arc.length * 2 > Math.max(60, straight * 2.2)) continue;
+      for (const i of arc) v.push(new THREE.Vector3(track.px[i], 0, track.pz[i]));
+    }
     const curve = new THREE.CatmullRomCurve3(v, false, 'centripetal', 0.5);
     const n = Math.max(2, Math.floor(curve.getLength() / 5));
     return curve.getSpacedPoints(n);
@@ -410,7 +440,7 @@ function buildViaduct(line: RailLine, spacing: number, tex: THREE.Texture, terra
 }
 
 /** 横方向 a..b の水平な帯 (高さ dy だけ持ち上げる) */
-function strip(line: RailLine, a: number, b: number, dy: number, mat: THREE.Material): THREE.Mesh {
+function strip(line: RailLine, a: number, b: number, dy: number, mat: THREE.Material, faceDown = false): THREE.Mesh {
   const pos: number[] = [], uv: number[] = [], idx: number[] = [];
   const n = line.pts.length;
   for (let i = 0; i < n; i++) {
@@ -419,7 +449,13 @@ function strip(line: RailLine, a: number, b: number, dy: number, mat: THREE.Mate
     pos.push(p.x + p.tz * b, p.y + dy, p.z - p.tx * b);
     const v = p.s / 6;
     uv.push(0, v, 1, v);
-    if (i < n - 1) { const q = i * 2; idx.push(q, q + 1, q + 2, q + 1, q + 3, q + 2); }
+    // 巻き順で法線の向きが決まる。軌道敷・レール・床版は上から見るので上向き
+    // (法線 +Y)。桁の底面だけ faceDown で下向きにする。
+    if (i < n - 1) {
+      const q = i * 2;
+      if (faceDown) idx.push(q, q + 1, q + 2, q + 1, q + 3, q + 2);
+      else idx.push(q, q + 2, q + 1, q + 1, q + 2, q + 3);
+    }
   }
   const geo = new THREE.BufferGeometry();
   geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
@@ -506,7 +542,7 @@ function partialVertical(line: RailLine, off: number, y0: number, h: number, mat
 function box3(line: RailLine, w: number, yBottom: number, mat: THREE.Material): THREE.Group {
   const g = new THREE.Group();
   for (const side of [1, -1]) g.add(vertical(line, side * w, yBottom, -yBottom, mat));
-  g.add(strip(line, -w, w, yBottom, mat));
+  g.add(strip(line, -w, w, yBottom, mat, true));
   return g;
 }
 
