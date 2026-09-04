@@ -27,6 +27,7 @@
     #overlay h1 { font-size: 54px; margin: 0 0 6px; font-style: italic; letter-spacing: .05em; color: #ffd83d; text-shadow: 0 4px 0 #b6201f, 0 8px 20px rgba(0,0,0,.6); }
     #overlay h2 { font-size: 20px; font-weight: 500; margin: 0 0 24px; opacity: .9; }
     #overlay .route { font-size: 15px; opacity: .85; margin-bottom: 26px; line-height: 1.7; max-width: 640px; }
+    #titleMap { width: min(560px, 84vw); height: auto; margin: 0 0 14px; }
     #overlay button { font-size: 24px; font-weight: 800; padding: 14px 48px; border: none; border-radius: 40px; background: linear-gradient(#ff5a5a, #c81e1e); color: #fff; cursor: pointer; box-shadow: 0 6px 0 #7d0f0f, 0 12px 24px rgba(0,0,0,.5); }
     #overlay button:disabled { opacity: .5; cursor: default; }
     #overlay .keys { margin-top: 26px; font-size: 14px; opacity: .8; line-height: 1.8; }
@@ -66,7 +67,8 @@
   <div id="overlay">
     <h1>HIROSHIMA KART</h1>
     <h2>広島グランプリ — PLATEAU 3D都市モデル (国土交通省) で走る広島の街</h2>
-    <div class="route">広島駅 → 銀山町 → 八丁堀 → 紙屋町 → 原爆ドーム前 → 十日市 → 寺町 → 横川駅 → 新白島 → 城北 → 広島駅北口 → 広島駅<br /><span style="opacity:.75;font-size:13px">1周 約7.3km / 走行線は PLATEAU の道路データの上を通ります。道の中央を広島電鉄が走ります（接触するとスピン）</span></div>
+    <canvas id="titleMap" width="1120" height="640"></canvas>
+    <div class="route">広島駅 → 銀山町 → 八丁堀 → 紙屋町 → 原爆ドーム前 → 十日市 → 寺町 → 警察署前 → 合同庁舎東 → 白島 → 二葉の里 → 広島駅北口 → 広島駅<br /><span style="opacity:.75;font-size:13px">1周 7.47km / 走行線は PLATEAU の道路データの上を通ります。道の中央を広島電鉄が走ります（接触するとスピン）</span></div>
     <div id="results">
       <table id="resultTable"></table>
     </div>

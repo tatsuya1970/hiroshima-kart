@@ -5,7 +5,7 @@ import { Track } from './track';
 import { buildBuildings, type BuildingsData } from './buildings';
 import { Kart, type RacerDef } from './kart';
 import { ItemSystem } from './items';
-import { Hud } from './hud';
+import { Hud, drawCourseMap } from './hud';
 import { InputManager } from './input';
 import { AudioSystem } from './audio';
 import { buildRail, type RailSystem } from './rail';
@@ -134,6 +134,8 @@ async function main() {
   const items = new ItemSystem(track, rand);
   scene.add(items.group);
   const hud = new Hud(track, LAPS);
+  const titleMap = document.getElementById('titleMap') as HTMLCanvasElement;
+  drawCourseMap(titleMap, track);
   const input = new InputManager();
   const audio = new AudioSystem();
   input.onMute = () => audio.toggleMute();
@@ -181,6 +183,7 @@ async function main() {
       return `<tr style="${k.def.isPlayer ? 'color:#ffd83d;font-weight:800' : ''}"><td>${i + 1}</td><td><span style="display:inline-block;width:14px;height:14px;border-radius:50%;background:#${k.def.color.toString(16).padStart(6, '0')}"></span></td><td>${k.def.name}</td><td>${t}</td></tr>`;
     }).join('');
     results.style.display = 'block';
+    titleMap.style.display = 'none';   // リザルトではコース図を隠す
     overlay.style.display = 'flex';
     startBtn.textContent = 'もう一度走る';
     startBtn.disabled = false;
