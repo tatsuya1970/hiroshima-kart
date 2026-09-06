@@ -14,6 +14,7 @@
 import * as THREE from 'three';
 import parkData from '../data/parks.json';
 import { llToXZ, COURSE_PATH, ROAD_WIDTH, rng } from './geo';
+import { landmarkBlocksBuilding } from './landmarks';
 import type { Terrain } from './terrain';
 import type { Track } from './track';
 import type { BuildingsData } from './buildings';
@@ -314,6 +315,9 @@ export class Parks {
         const nr = track.nearest(x, z);
         if (Math.abs(nr.lateral) < track.halfWidth + 6 && nr.dist < track.halfWidth + 10) continue;
         if (onBuilding(x, z)) continue;
+        // ランドマークの敷地 (ピースウィングは中央公園の中に建つ) には植えない。
+        // 1 点だけの ring を渡すとその点の判定になる。
+        if (landmarkBlocksBuilding([x, z])) continue;
         taken.add(cellKey);
         placed++;
         trees.push({

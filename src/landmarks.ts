@@ -98,9 +98,10 @@ export function buildPeaceWing(terrain: Terrain): THREE.Group {
   g.position.set(x, base, z);
   g.rotation.y = -(info.headingDeg * Math.PI) / 180;
 
-  // 敷地 (スタジアムより一回り大きい平場)
+  // 敷地 (スタジアムより一回り大きい平場)。コースが南 126m を通るので、
+  // 平場が路面に被らない大きさにとどめる。
   const siteShape = new THREE.Shape();
-  superellipse(150, 124, 64, 0.75).forEach(([px, pz], i) => i ? siteShape.lineTo(px, pz) : siteShape.moveTo(px, pz));
+  superellipse(118, 102, 64, 0.75).forEach(([px, pz], i) => i ? siteShape.lineTo(px, pz) : siteShape.moveTo(px, pz));
   siteShape.closePath();
   // 中央公園なので芝寄りの色にして、誤判定された水面をまたいでも浮かないようにする
   const site = new THREE.Mesh(new THREE.ShapeGeometry(siteShape), new THREE.MeshLambertMaterial({ color: 0x7f8a63 }));
