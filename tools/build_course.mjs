@@ -235,6 +235,60 @@ if (sp && sp.points?.length >= 2) {
   console.log(`駅の貫通区間: 制御点 ${passSpan.a} → ${passSpan.b}${passSpan.reverse ? ' (南→北)' : ''}`);
 }
 
+// ---------------- 6b. 貫通区間の両端を道路の中央へ ----------------
+// 貫通区間の端点は手で置いた座標なので、道路の中央 (A* が通る所) から横にずれている
+// ことがある。ずれたままだと、A* は端点ではなく最寄りの制御点から始まるため、
+// 端点から制御点へ引き返す往復が経路に残り、スロープが着地する所で道路・軌道が
+// 食い違う。端点を横断方向に見て道路の中央へ寄せ、ずれの分はスロープ全体で徐々に
+// 吸収する。A* もその点から始める (端点の近くに道路が無ければ何もしない)。
+let passSeq = null; // [x, z, h] の列 (経路の向き)
+if (passSpan) {
+  passSeq = (passSpan.reverse ? [...sp.points].reverse() : sp.points).map(p => [...toXZ(p.lat, p.lon), p.h]);
+  const n = passSeq.length;
+  const top = Math.max(...passSeq.map(p => p[2]));
+  const isTop = p => p[2] >= top - 1e-6;
+  const firstTop = passSeq.findIndex(isTop);
+  const lastTop = n - 1 - [...passSeq].reverse().findIndex(isTop);
+  // 端点 p から隣点 q の向きに直交する線上で、道路の縁から最も遠いセル (= 道路の中央)
+  const roadCenterAcross = (p, q, range = 40) => {
+    let tx = q[0] - p[0], tz = q[1] - p[1];
+    const l = Math.hypot(tx, tz) || 1; tx /= l; tz /= l;
+    const nx = tz, nz = -tx;
+    let best = -1, bestD = 0, bestOff = Infinity;
+    for (let o = -range; o <= range; o += 1) {
+      const i = Math.round((p[0] + nx * o - xMin) / CELL), j = Math.round((p[1] + nz * o - zMin) / CELL);
+      if (i < 0 || j < 0 || i >= W || j >= H) continue;
+      const k = j * W + i;
+      if (!road[k]) continue;
+      if (dist[k] > bestD + 1e-6 || (Math.abs(dist[k] - bestD) <= 1e-6 && Math.abs(o) < bestOff)) { bestD = dist[k]; bestOff = Math.abs(o); best = k; }
+    }
+    return best;
+  };
+  // from..to のスロープに横ずれ delta を徐々にかける (端 endIdx で 1、もう一方で 0)
+  const shiftRamp = (from, to, endIdx, delta) => {
+    const cum = [0];
+    for (let i = from + 1; i <= to; i++) cum.push(cum[cum.length - 1] + Math.hypot(passSeq[i][0] - passSeq[i - 1][0], passSeq[i][1] - passSeq[i - 1][1]));
+    const total = cum[cum.length - 1] || 1;
+    for (let i = from; i <= to; i++) {
+      let w = cum[i - from] / total;
+      if (endIdx === from) w = 1 - w;
+      passSeq[i][0] += delta[0] * w; passSeq[i][1] += delta[1] * w;
+    }
+  };
+  for (const [endIdx, nextIdx, anchorKey, rampFrom, rampTo, label] of [
+    [n - 1, n - 2, 'b', lastTop, n - 1, '終点'],
+    [0, 1, 'a', 0, firstTop, '始点'],
+  ]) {
+    const k = roadCenterAcross(passSeq[endIdx], passSeq[nextIdx]);
+    if (k < 0) { console.log(`  貫通区間の${label}の横に道路が無いのでそのまま`); continue; }
+    const [cx, cz] = cellToXZ(k);
+    const delta = [cx - passSeq[endIdx][0], cz - passSeq[endIdx][1]];
+    shiftRamp(rampFrom, rampTo, endIdx, delta);
+    anchors[passSpan[anchorKey]] = k;
+    console.log(`  貫通区間の${label}を道路の中央へ ${Math.hypot(delta[0], delta[1]).toFixed(1)}m 寄せました`);
+  }
+}
+
 // ---------------- 7. 経路の組み立て ----------------
 const pts = [];
 const nAnchors = anchors.length;
@@ -247,14 +301,14 @@ for (let a = 0; a < nAnchors; a++) {
   const b = (a + 1) % nAnchors;
   if (inPassSpan(a)) {
     if (a === passSpan.a) {
-      const seq = passSpan.reverse ? [...sp.points].reverse() : sp.points;
+      const seq = passSeq;
       for (let i = 0; i + 1 < seq.length; i++) {
-        const p0 = toXZ(seq[i].lat, seq[i].lon), p1 = toXZ(seq[i + 1].lat, seq[i + 1].lon);
+        const p0 = seq[i], p1 = seq[i + 1];
         const L = Math.hypot(p1[0] - p0[0], p1[1] - p0[1]);
         const m = Math.max(1, Math.ceil(L / CELL));
         for (let k = 0; k < m; k++) {
           const t = k / m;
-          pts.push([p0[0] + (p1[0] - p0[0]) * t, p0[1] + (p1[1] - p0[1]) * t, seq[i].h + (seq[i + 1].h - seq[i].h) * t]);
+          pts.push([p0[0] + (p1[0] - p0[0]) * t, p0[1] + (p1[1] - p0[1]) * t, p0[2] + (p1[2] - p0[2]) * t]);
         }
       }
       console.log(`  駅の貫通: ${sp.points.length} 点をそのまま使用 (最高 ${Math.max(...sp.points.map(p => p.h))}m)`);

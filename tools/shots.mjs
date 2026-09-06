@@ -5,6 +5,7 @@ import { chromium } from 'playwright';
 import { mkdirSync, writeFileSync } from 'node:fs';
 
 const [outDir, ...specs] = process.argv.slice(2);
+const BASE = 'http://localhost:' + (process.env.PORT ?? '5180') + '/';
 mkdirSync(outDir, { recursive: true });
 const browser = await chromium.launch({ args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'] });
 const page = await browser.newPage({ viewport: { width: 1280, height: 720 } });
@@ -15,14 +16,14 @@ for (const spec of specs) {
   const eq = spec.indexOf('=');
   const name = spec.slice(0, eq), query = spec.slice(eq + 1);
   if (query === 'GROUND') {
-    await page.goto('http://localhost:5180/?debug=1', { waitUntil: 'load' });
+    await page.goto(BASE + '?debug=1', { waitUntil: 'load' });
     await page.waitForFunction(() => (window).__groundCanvas, null, { timeout: 180000 });
     const data = await page.evaluate(() => (window).__groundCanvas.toDataURL('image/png'));
     writeFileSync(`${outDir}/${name}.png`, Buffer.from(data.split(',')[1], 'base64'));
     console.log('ground saved');
     continue;
   }
-  await page.goto('http://localhost:5180/?' + query, { waitUntil: 'load' });
+  await page.goto(BASE + '?' + query, { waitUntil: 'load' });
   await page.waitForFunction(() => (window).__debug, null, { timeout: 180000 });
   await page.waitForTimeout(2500);
   await page.screenshot({ path: `${outDir}/${name}.png` });

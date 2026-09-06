@@ -88,6 +88,23 @@ export class Track {
       }
       cur = out;
     }
+    // 平滑化で地面 (DEM) より低くなった所を持ち上げる。DEM に橋の桁面などの局所的な
+    // 盛り上がりがあると移動平均で削れ、地形が路面を突き抜けて見える (駅前大橋など)。
+    // 地面より下にはならないよう下限を掛け、できた段差は短い窓で慣らす。
+    // 慣らすとまた下回るので何度か繰り返し、最後にもう一度下限を掛ける。
+    const floor = (v: Float32Array) => { for (let i = 0; i < n; i++) if (v[i] < raw[i] + 0.05) v[i] = raw[i] + 0.05; };
+    for (let pass = 0; pass < 3; pass++) {
+      floor(cur);
+      const out = new Float32Array(n);
+      const R = 6;
+      for (let i = 0; i < n; i++) {
+        let sum = 0;
+        for (let d = -R; d <= R; d++) sum += cur[(i + d + n) % n];
+        out[i] = sum / (2 * R + 1);
+      }
+      cur = out;
+    }
+    floor(cur);
     // 高架区間 (実在しない新設道路) のかさ上げ量。経路の印を平滑化してスロープにする
     this.elev = new Float32Array(n);
     {
