@@ -386,23 +386,25 @@ export function makeStoneWallTexture(): THREE.Texture {
 /** スタジアム外周のルーバー (木調の縦格子) */
 export function makeStadiumFacadeTexture(): THREE.Texture {
   const [c, ctx] = canvas(256, 256);
-  // 奥に見えるコンコースの陰
-  ctx.fillStyle = '#3a332c'; ctx.fillRect(0, 0, 256, 256);
+  // ルーバーの隙間から覗くコンコース。全体が薄い灰色に見えるよう、
+  // 隙間も真っ暗にはせず一段暗い灰色にとどめる。
+  ctx.fillStyle = '#7c8288'; ctx.fillRect(0, 0, 256, 256);
   for (let i = 0; i < 240; i++) {
-    ctx.fillStyle = `rgba(0,0,0,${Math.random() * 0.3})`;
+    ctx.fillStyle = `rgba(0,0,0,${Math.random() * 0.22})`;
     ctx.fillRect(Math.random() * 256, Math.random() * 256, 6, 4);
   }
-  // 縦ルーバー (木調)
+  // 縦ルーバー (薄い灰色の金属フィン)
   for (let x = 0; x < 256; x += 16) {
-    const t = Math.random() * 0.18;
-    ctx.fillStyle = `rgb(${Math.round(176 - t * 90)},${Math.round(132 - t * 70)},${Math.round(84 - t * 45)})`;
-    ctx.fillRect(x, 0, 11, 256);
-    // 木目
-    ctx.fillStyle = 'rgba(90,60,32,0.25)';
-    for (let k = 0; k < 5; k++) ctx.fillRect(x + 1 + Math.random() * 8, Math.random() * 256, 1, 30 + Math.random() * 60);
-    // 陰影
-    ctx.fillStyle = 'rgba(0,0,0,0.28)'; ctx.fillRect(x + 9, 0, 2, 256);
-    ctx.fillStyle = 'rgba(255,255,255,0.12)'; ctx.fillRect(x, 0, 2, 256);
+    const t = Math.random() * 0.1;
+    const g = (v: number) => Math.round(v - t * 40);
+    ctx.fillStyle = `rgb(${g(214)},${g(216)},${g(219)})`;
+    ctx.fillRect(x, 0, 13, 256);
+    // 継ぎ目の筋
+    ctx.fillStyle = 'rgba(140,146,152,0.16)';
+    for (let k = 0; k < 4; k++) ctx.fillRect(x + 1 + Math.random() * 10, Math.random() * 256, 1, 30 + Math.random() * 60);
+    // 陰影 (フィンの厚みを出す)
+    ctx.fillStyle = 'rgba(0,0,0,0.2)'; ctx.fillRect(x + 12, 0, 1, 256);
+    ctx.fillStyle = 'rgba(255,255,255,0.25)'; ctx.fillRect(x, 0, 2, 256);
   }
   return toTexture(c);
 }

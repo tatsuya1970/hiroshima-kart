@@ -23,6 +23,24 @@ function samplePath(pts: { lat: number; lon: number }[], step: number, closed = 
 }
 
 /**
+ * 両端に直線の延長を足す。車両は終端で折り返さず反対の端へ回るので、
+ * その入れ替わりが停留場の外で起きるようにするための引き込み線。
+ * 実際の終端 (広島駅・横川駅) にも駅構内へ線路が続いている。
+ */
+function withTail(pts: THREE.Vector3[], tail: number): THREE.Vector3[] {
+  const n = pts.length;
+  if (n < 2) return pts;
+  const ext = (from: THREE.Vector3, toward: THREE.Vector3) =>
+    from.clone().sub(toward).normalize().multiplyScalar(tail).add(from);
+  return [ext(pts[0], pts[1]), ...pts, ext(pts[n - 1], pts[n - 2])];
+}
+
+/** 距離 s を [0, L) に丸める (終端で反対の端へ回すため) */
+function wrapS(s: number, L: number): number {
+  return ((s % L) + L) % L;
+}
+
+/**
  * コース上の 2 点を結ぶ点列の添字を返す。コースは閉ループなので短い側を辿る。
  * 端点は含まない (呼び出し側が停留場の座標を入れるため)。
  */
@@ -182,7 +200,6 @@ class Train {
   private line: RailLine;
   private def: TrainDef;
   private trackOffset: number;
-  private dwell = 0;
 
   constructor(line: RailLine, def: TrainDef, sideTex: THREE.Texture, roofColor: number, s0: number, dir: number, trackOffset: number) {
     this.line = line; this.def = def; this.s = s0; this.dir = dir; this.speed = def.speed;
@@ -197,16 +214,25 @@ class Train {
 
   get totalLength() { return this.def.cars * (this.def.carLen + this.def.gap); }
 
+  /**
+   * 終端で止まったり折り返したりせず、反対の端へ回して同じ向きに走り続ける。
+   *
+   * 広電の終端は広島駅 (スタート地点) と横川駅で、どちらもコースのそばにある。
+   * そこで 2.5 秒止まって折り返すと、接触したカートが電車を押し戻したように
+   * 見えてしまう。カートとの接触は電車の動きに一切影響しない (main.ts の接触
+   * 処理はカートだけを回転させる)。
+   *
+   * 向きが変わらなくなるので、上下線のどちら側を走るか (trackOffset) も
+   * ずれなくなる。折り返していた頃は、折り返した後も同じ側を走っていた。
+   */
   update(dt: number) {
-    if (this.dwell > 0) this.dwell -= dt;
-    else this.s += this.speed * this.dir * dt;
-    const L = this.line.length, tl = this.totalLength;
-    if (this.dir > 0 && this.s > L - tl * 0.6) { this.dir = -1; this.dwell = 2.5; }
-    else if (this.dir < 0 && this.s < tl * 0.6) { this.dir = 1; this.dwell = 2.5; }
+    const L = this.line.length;
+    this.s = wrapS(this.s + this.speed * this.dir * dt, L);
     const step = this.def.carLen + this.def.gap;
     for (let i = 0; i < this.carGroups.length; i++) {
-      const cs = this.s - this.dir * (i - (this.carGroups.length - 1) / 2) * step;
-      const p = this.line.at(Math.max(0, Math.min(L, cs)));
+      // 車体ごとに回り込ませて、端をまたぐ間も編成の間隔を保つ
+      const cs = wrapS(this.s - this.dir * (i - (this.carGroups.length - 1) / 2) * step, L);
+      const p = this.line.at(cs);
       const off = this.trackOffset;
       this.carGroups[i].position.set(p.x + p.tz * off, p.y, p.z - p.tx * off);
       this.carGroups[i].rotation.y = Math.atan2(p.tx, p.tz);
@@ -266,7 +292,7 @@ export function buildRail(terrain: Terrain, track: Track): RailSystem {
     }
     const curve = new THREE.CatmullRomCurve3(v, false, 'centripetal', 0.5);
     const n = Math.max(2, Math.floor(curve.getLength() / 5));
-    return curve.getSpacedPoints(n);
+    return withTail(curve.getSpacedPoints(n), 70);
   })();
   const tramLine = new RailLine('tram', tramRaw, (x, z) => {
     const nr = track.nearest(x, z);

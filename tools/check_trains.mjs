@@ -4,7 +4,7 @@ import { chromium } from 'playwright';
 const browser = await chromium.launch({ args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'] });
 const page = await browser.newPage({ viewport: { width: 640, height: 360 } });
 page.on('pageerror', e => console.log('[pageerror]', e.message));
-await page.goto('http://localhost:5180/?debug=1&wp=15&cam=3&steps=6', { waitUntil: 'load' });
+await page.goto(`http://localhost:${process.env.PORT ?? 5180}/?debug=1&wp=15&cam=3&steps=6`, { waitUntil: 'load' });
 await page.waitForFunction(() => (window).__debug, null, { timeout: 240000 });
 
 const snap = () => page.evaluate(() => {

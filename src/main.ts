@@ -346,6 +346,8 @@ async function main() {
     if (racing) {
       for (const k of karts) {
         if (k.spinTimer > 0 || k.invincible) continue;
+        // 接触してもスピンするのはカートだけ。電車は減速も停止も折り返しもせず
+        // そのまま走り続ける (rail.ts の Train.update は接触を見ていない)。
         if (rail.hitTram(k.x, k.z, 1.3)) {
           k.spinTimer = 1.5; k.drifting = 0; k.speed *= 0.25;
           itemEvents.onHit(k, null);
