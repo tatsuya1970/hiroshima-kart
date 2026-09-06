@@ -369,8 +369,9 @@ async function main() {
     for (let i = 0; i < karts.length; i++) {
       const id = info.order[i];
       karts[i].def.isPlayer = i === mySlot;
-      karts[i].def.name = id ? (info.names[id] ?? 'プレイヤー') : DEFAULT_NAMES[i];
-      setLabel(i, id ? karts[i].def.name : `${DEFAULT_NAMES[i]} (AI)`);
+      karts[i].def.name = id ? (info.names[id] ?? t('lobby.anon')) : DEFAULT_NAMES[i];
+      // 自分のカートには名前を出さない。カメラのすぐ前にあるので視界を塞ぐ
+      setLabel(i, i === mySlot ? '' : id ? karts[i].def.name : `${DEFAULT_NAMES[i]} (AI)`);
     }
     renderLobby();
   }
@@ -397,6 +398,8 @@ async function main() {
     mySlot = net.mySlot;
     player = karts[mySlot];
     for (let i = 0; i < karts.length; i++) karts[i].def.isPlayer = i === mySlot;
+    // 席が変わったまま発走した場合に備えて、自分の名前はここでも消す
+    setLabel(mySlot, '');
     overlay.style.display = 'none';
     audio.start();
     state = 'countdown'; countdown = 3.999;

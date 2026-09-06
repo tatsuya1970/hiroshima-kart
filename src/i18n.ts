@@ -57,6 +57,7 @@ const JA: Dict = {
   'lobby.you': 'あなた',
   'lobby.host': 'ホスト',
   'lobby.status': 'いま {0} 人。空いた {1} 台は AI が走ります。',
+  'lobby.anon': 'プレイヤー',
   'lobby.waitHost': ' 発走はホストの合図で揃えます。',
   'net.failed': '接続できませんでした: {0}',
 
@@ -103,6 +104,7 @@ const EN: Dict = {
   'lobby.you': 'you',
   'lobby.host': 'host',
   'lobby.status': '{0} here. The other {1} karts are AI.',
+  'lobby.anon': 'Player',
   'lobby.waitHost': ' The host gives the start signal.',
   'net.failed': 'Could not connect: {0}',
 
