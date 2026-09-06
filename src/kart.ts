@@ -55,6 +55,10 @@ export class Kart {
   aiLane = 0; aiLaneTarget = 0; aiTimer = 0; aiItemTimer = 2;
   aiThrottle = 1;
 
+  // オンライン対戦: 他人が動かすカートの受信位置
+  netX = 0; netZ = 0; netY = 0; netHeading = 0; netSpeed = 0;
+  hasNet = false;
+
   constructor(def: RacerDef) {
     this.def = def;
     this.buildModel();
@@ -233,6 +237,36 @@ export class Kart {
     const ahead = track.wrap(nr.idx + 5), behind = track.wrap(nr.idx - 5);
     const slope = (track.py[ahead] - track.py[behind]) / 20;
     this.pitch = lerp(this.pitch, -Math.atan(slope) * (dir > 0 ? 1 : -1), Math.min(1, dt * 6));
+    this.wheelSpin += this.speed * dt / 0.34;
+    this.syncMesh(track, dt);
+  }
+
+  /**
+   * オンライン対戦で、他人が動かしているカートを表示する。
+   *
+   * 受信は 15Hz 程度なので、受け取った位置を速度で前へ進めながら (デッドレコニング)
+   * 表示位置をそこへ寄せる。物理は回さない。回すと相手の画面と食い違い、
+   * ぶつかってもいないのに弾かれて見えるため。
+   */
+  netApply(dt: number, track: Track) {
+    if (!this.hasNet) return;
+    this.netX += Math.cos(this.netHeading) * this.netSpeed * dt;
+    this.netZ += Math.sin(this.netHeading) * this.netSpeed * dt;
+    const k = Math.min(1, dt * 9);
+    this.x = lerp(this.x, this.netX, k);
+    this.z = lerp(this.z, this.netZ, k);
+    this.y = lerp(this.y, this.netY, k);
+    let d = this.netHeading - this.heading;
+    d = Math.atan2(Math.sin(d), Math.cos(d));
+    this.heading += d * k;
+    this.speed = this.netSpeed;
+    this.spinTimer = Math.max(0, this.spinTimer - dt);
+    if (this.spinTimer > 0) this.spinAngle += dt * 9;
+    this.boostTimer = Math.max(0, this.boostTimer - dt);
+    this.starTimer = Math.max(0, this.starTimer - dt);
+    if (this.drifting !== 0) this.driftTime += dt;
+    this.trackIdx = track.nearest(this.x, this.z, this.trackIdx).idx;
+    this.progress = (this.lap - 1) * track.length + this.s;
     this.wheelSpin += this.speed * dt / 0.34;
     this.syncMesh(track, dt);
   }

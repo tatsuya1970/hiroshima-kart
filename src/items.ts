@@ -90,30 +90,48 @@ export class ItemSystem {
     if (!k.item || k.itemRoulette > 0) return;
     const it = k.item; k.item = null;
     ev.onUse(k);
-    const fx = Math.cos(k.heading), fz = Math.sin(k.heading);
-    if (it === 'mushroom') { k.boostTimer = 1.6; k.boostPower = 1.4; ev.onBoost(k); }
-    else if (it === 'star') { k.starTimer = 7; k.spinTimer = 0; }
+    this.spawn(it, k, k.x, k.z, k.y, k.heading, k.speed, ev);
+  }
+
+  /**
+   * アイテムを実体化する。オンライン対戦では、他の人が使ったアイテムも
+   * 受信した位置でここから出す (spawnFromNet)。
+   */
+  private spawn(it: ItemType, owner: Kart, x0: number, z0: number, y0: number, heading: number, speed: number, ev: ItemEvents | null) {
+    const fx = Math.cos(heading), fz = Math.sin(heading);
+    if (it === 'mushroom') { owner.boostTimer = 1.6; owner.boostPower = 1.4; ev?.onBoost(owner); }
+    else if (it === 'star') { owner.starTimer = 7; owner.spinTimer = 0; }
     else if (it === 'banana') {
       const mesh = this.bananaTemplate.clone();
-      const x = k.x - fx * 3, z = k.z - fz * 3;
-      const nr = this.track.nearest(x, z, k.trackIdx);
+      const x = x0 - fx * 3, z = z0 - fz * 3;
+      const nr = this.track.nearest(x, z, owner.trackIdx);
       const lat = Math.max(-this.track.halfWidth + 1, Math.min(this.track.halfWidth - 1, nr.lateral));
       const p = this.track.pointAt(nr.idx, lat);
       mesh.position.copy(p);
       this.group.add(mesh);
-      this.bananas.push({ x: p.x, z: p.z, y: p.y, mesh, owner: k, age: 0 });
+      this.bananas.push({ x: p.x, z: p.z, y: p.y, mesh, owner, age: 0 });
     } else if (it === 'shell') {
       const mesh = new THREE.Mesh(this.shellGeo, this.shellMat);
       mesh.castShadow = true;
-      const sp = Math.max(k.speed, 0) + 32;
-      const x = k.x + fx * 2.5, z = k.z + fz * 2.5;
-      mesh.position.set(x, k.y + 0.55, z);
+      const sp = Math.max(speed, 0) + 32;
+      const x = x0 + fx * 2.5, z = z0 + fz * 2.5;
+      mesh.position.set(x, y0 + 0.55, z);
       this.group.add(mesh);
-      this.shells.push({ x, z, y: k.y + 0.55, vx: fx * sp, vz: fz * sp, mesh, owner: k, life: 7, bounces: 0, trackIdx: k.trackIdx });
+      this.shells.push({ x, z, y: y0 + 0.55, vx: fx * sp, vz: fz * sp, mesh, owner, life: 7, bounces: 0, trackIdx: owner.trackIdx });
     }
   }
 
-  update(dt: number, karts: Kart[], ev: ItemEvents) {
+  /** オンライン対戦: 他の人が使ったアイテムを、受信した位置で出す */
+  spawnFromNet(it: ItemType, owner: Kart, x: number, z: number, y: number, heading: number, speed: number) {
+    this.spawn(it, owner, x, z, y, heading, speed, null);
+  }
+
+  /**
+   * @param owns そのカートの判定を自分の画面で行ってよいか。オンライン対戦では
+   *   「自分が動かしているカート」だけ true にする。取得も被弾も持ち主の画面だけで
+   *   決め、結果をイベントで配らないと、各自の画面で別々に当たったことになる。
+   */
+  update(dt: number, karts: Kart[], ev: ItemEvents, owns: (k: Kart) => boolean = () => true) {
     this.time += dt;
     const hw = this.track.halfWidth;
     // ボックス
@@ -122,7 +140,7 @@ export class ItemSystem {
       b.mesh.rotation.y = this.time * 1.2; b.mesh.rotation.x = this.time * 0.8;
       b.mesh.position.y = this.track.py[b.idx] + 1.3 + Math.sin(this.time * 2 + b.idx) * 0.15;
       for (const k of karts) {
-        if (k.item || k.itemRoulette > 0) continue;
+        if (k.item || k.itemRoulette > 0 || !owns(k)) continue;
         const dx = k.x - b.mesh.position.x, dz = k.z - b.mesh.position.z;
         if (dx * dx + dz * dz < 2.4 * 2.4) {
           b.respawn = 3; b.mesh.visible = false;
@@ -137,6 +155,7 @@ export class ItemSystem {
       if (c.taken > 0) { c.taken -= dt; c.mesh.visible = c.taken <= 0; if (c.taken > 0) continue; }
       c.mesh.rotation.z = this.time * 3;
       for (const k of karts) {
+        if (!owns(k)) continue;
         const dx = k.x - c.mesh.position.x, dz = k.z - c.mesh.position.z;
         if (dx * dx + dz * dz < 2.0 * 2.0) {
           c.taken = 12; c.mesh.visible = false;
@@ -156,7 +175,7 @@ export class ItemSystem {
         if (k === b.owner && b.age < 1.0) continue;
         const dx = k.x - b.x, dz = k.z - b.z;
         if (dx * dx + dz * dz < 1.9 * 1.9) {
-          if (!k.invincible) { k.spinTimer = 1.3; k.drifting = 0; ev.onHit(k, b.owner); }
+          if (owns(k) && !k.invincible) { k.spinTimer = 1.3; k.drifting = 0; ev.onHit(k, b.owner); }
           hit = true; break;
         }
       }
@@ -187,7 +206,7 @@ export class ItemSystem {
         if (k === s.owner && s.life > 6.6) continue;
         const dx = k.x - s.x, dz = k.z - s.z;
         if (dx * dx + dz * dz < 1.9 * 1.9) {
-          if (!k.invincible) { k.spinTimer = 1.4; k.drifting = 0; ev.onHit(k, s.owner); }
+          if (owns(k) && !k.invincible) { k.spinTimer = 1.4; k.drifting = 0; ev.onHit(k, s.owner); }
           dead = true; break;
         }
       }

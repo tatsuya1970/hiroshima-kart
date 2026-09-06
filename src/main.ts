@@ -3,8 +3,9 @@ import * as THREE from 'three';
 import { loadTerrain, type Terrain } from './terrain';
 import { Track } from './track';
 import { buildBuildings, type BuildingsData } from './buildings';
-import { Kart, type RacerDef } from './kart';
+import { Kart, type RacerDef, type ItemType } from './kart';
 import { ItemSystem } from './items';
+import { NetSession, makeRoomCode, normalizeRoomCode, type LobbyInfo, type NetEvent, type Pose } from './net';
 import { Hud, drawCourseMap } from './hud';
 import { InputManager } from './input';
 import { AudioSystem } from './audio';
@@ -163,8 +164,11 @@ async function main() {
 
   // ---- カート / アイテム ----
   const rand = rng(20240803);
+  // def は RACERS の要素そのものなので、オンライン対戦で名前を差し替える前に控える
+  const DEFAULT_NAMES = RACERS.map(r => r.name);
   const karts = RACERS.map(d => new Kart(d));
-  const player = karts[0];
+  // オンライン対戦では自分の枠が 0 とは限らないので差し替える
+  let player = karts[0];
   const startOrder = [3, 1, 0, 2, 4, 5, 6, 7]; // グリッド順 (index of karts)
   startOrder.forEach((ki, slot) => {
     const row = Math.floor(slot / 2), col = slot % 2;
@@ -183,6 +187,20 @@ async function main() {
   let camMode = 0;
   input.onCamera = () => { camMode = (camMode + 1) % 4; };
 
+  // ---- オンライン対戦 ----
+  // 自分のカートだけ物理を回し、他人のカートは受信位置へ寄せる。
+  // 空き枠の AI はホストが回して配る。
+  let net: NetSession | null = null;
+  let mySlot = 0;
+
+  /** そのカートを自分の画面で動かしてよいか (自分のカート + ホストなら空き枠の AI) */
+  function isLocal(k: Kart): boolean {
+    if (!net) return true;
+    const i = karts.indexOf(k);
+    if (i === mySlot) return true;
+    return net.isHost && i >= net.order.length;
+  }
+
   // ---- イベント ----
   const kartEvents = {
     onLap: (k: Kart) => {
@@ -197,7 +215,11 @@ async function main() {
   const itemEvents = {
     onPickup: (k: Kart) => { if (k.def.isPlayer) audio.pickup(); },
     onCoin: (k: Kart) => { if (k.def.isPlayer) audio.coin(); },
-    onHit: (v: Kart, _by: Kart | null) => { if (v.def.isPlayer) { audio.hit(); v.coins = Math.max(0, v.coins - 2); } },
+    onHit: (v: Kart, _by: Kart | null) => {
+      if (v.def.isPlayer) { audio.hit(); v.coins = Math.max(0, v.coins - 2); }
+      // 被弾は持ち主の画面だけで決めるので、結果を全員へ配る
+      if (net?.started && isLocal(v)) net.emit({ t: 'hit', slot: karts.indexOf(v) });
+    },
     onUse: (k: Kart) => { if (k.def.isPlayer) audio.useItem(); },
     onBoost: (k: Kart) => { if (k.def.isPlayer) audio.boost(); },
   };
@@ -212,6 +234,7 @@ async function main() {
 
   function finishRace() {
     player.finished = true; player.finishTime = raceTime;
+    if (net?.started) net.emit({ t: 'fin', slot: mySlot, time: raceTime });
     state = 'finish';
     audio.finish();
     hud.showCenter('FINISH!', 3);
@@ -225,7 +248,9 @@ async function main() {
     }).join('');
     results.style.display = 'block';
     titleMap.style.display = 'none';   // リザルトではコース図を隠す
+    document.getElementById('online')!.style.display = 'none';
     overlay.style.display = 'flex';
+    startBtn.style.display = '';
     startBtn.textContent = 'もう一度走る';
     startBtn.disabled = false;
     startBtn.onclick = () => location.reload();
@@ -241,6 +266,158 @@ async function main() {
     audio.countdown();
   };
   input.onAny = () => audio.start();
+
+  // ---- オンライン対戦の UI と同期 ----
+  const byId = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
+  const onlineHome = byId<HTMLDivElement>('onlineHome');
+  const onlineRoom = byId<HTMLDivElement>('onlineRoom');
+  const nameInput = byId<HTMLInputElement>('playerName');
+  const roomInput = byId<HTMLInputElement>('roomInput');
+  const roomCodeEl = byId<HTMLSpanElement>('roomCode');
+  const playerList = byId<HTMLUListElement>('playerList');
+  const goBtn = byId<HTMLButtonElement>('goBtn');
+  const netNote2 = byId<HTMLDivElement>('netNote2');
+  const esc = (s: string) => s.replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]!));
+
+  nameInput.value = localStorage.getItem('hk.name') ?? '';
+  // ?room=XXXXX 付きのリンクで開いたら、あいことばを埋めておく
+  const linkRoom = normalizeRoomCode(params.get('room') ?? '');
+  if (linkRoom) roomInput.value = linkRoom;
+
+  /** 名前の吹き出し (誰がどのカートか分かるように) */
+  const labels: (THREE.Sprite | null)[] = karts.map(() => null);
+  function setLabel(i: number, text: string) {
+    const old = labels[i];
+    if (old) { karts[i].mesh.remove(old); old.material.map?.dispose(); old.material.dispose(); labels[i] = null; }
+    if (!text) return;
+    const cv = document.createElement('canvas');
+    cv.width = 256; cv.height = 64;
+    const c = cv.getContext('2d')!;
+    c.fillStyle = 'rgba(0,0,0,.55)';
+    c.beginPath(); c.roundRect(4, 8, 248, 48, 12); c.fill();
+    c.font = 'bold 32px system-ui, sans-serif';
+    c.textAlign = 'center'; c.textBaseline = 'middle';
+    c.fillStyle = '#fff';
+    c.fillText(text, 128, 33, 232);
+    const tex = new THREE.CanvasTexture(cv);
+    tex.colorSpace = THREE.SRGBColorSpace;
+    const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, transparent: true, depthTest: false }));
+    sp.scale.set(5.2, 1.3, 1);
+    sp.position.set(0, 3.1, 0);
+    sp.renderOrder = 5;
+    karts[i].mesh.add(sp);
+    labels[i] = sp;
+  }
+
+  function renderLobby() {
+    if (!net) return;
+    const hostId = net.host;
+    const ids = net.order.length ? net.order : net.peerIds();
+    playerList.innerHTML = ids.map((id, i) => {
+      const col = '#' + RACERS[i % RACERS.length].color.toString(16).padStart(6, '0');
+      const tags = [id === net!.selfId ? 'あなた' : '', id === hostId ? 'ホスト' : ''].filter(Boolean).join(' / ');
+      return `<li><span class="dot" style="background:${col}"></span>${esc(net!.names[id] ?? '接続中...')}<span class="tag">${tags}</span></li>`;
+    }).join('');
+    const ai = Math.max(0, RACERS.length - ids.length);
+    netNote2.textContent = net.isHost
+      ? `あなたがホストです。残り ${ai} 台は AI が走ります。`
+      : 'ホストが開始するのを待っています。';
+    goBtn.disabled = !net.isHost || net.started;
+  }
+
+  function applyLobby(info: LobbyInfo) {
+    if (!net) return;
+    mySlot = Math.max(0, net.mySlot);
+    player = karts[mySlot];
+    for (let i = 0; i < karts.length; i++) {
+      const id = info.order[i];
+      karts[i].def.isPlayer = i === mySlot;
+      karts[i].def.name = id ? (info.names[id] ?? 'プレイヤー') : DEFAULT_NAMES[i];
+      setLabel(i, id ? karts[i].def.name : `${DEFAULT_NAMES[i]} (AI)`);
+    }
+    renderLobby();
+  }
+
+  function beginOnlineRace() {
+    if (!net) return;
+    mySlot = Math.max(0, net.mySlot);
+    player = karts[mySlot];
+    for (let i = 0; i < karts.length; i++) karts[i].def.isPlayer = i === mySlot;
+    overlay.style.display = 'none';
+    audio.start();
+    state = 'countdown'; countdown = 3.999;
+    audio.countdown();
+    renderLobby();
+  }
+
+  function applyPoses(poses: Pose[]) {
+    for (const p of poses) {
+      const k = karts[p.slot];
+      if (!k || isLocal(k)) continue;
+      if (!k.hasNet) { k.x = p.x; k.z = p.z; k.y = p.y; k.heading = p.heading; }
+      k.hasNet = true;
+      k.netX = p.x; k.netZ = p.z; k.netY = p.y; k.netHeading = p.heading; k.netSpeed = p.speed;
+      k.drifting = p.drifting; k.lap = p.lap; k.s = p.s;
+      if (p.spin > k.spinTimer) { k.spinTimer = p.spin; }
+      k.boostTimer = Math.max(k.boostTimer, p.boost);
+      k.starTimer = Math.max(k.starTimer, p.star);
+    }
+  }
+
+  function applyEvent(ev: NetEvent) {
+    const k = karts[ev.slot];
+    if (!k) return;
+    if (ev.t === 'use') {
+      if (!isLocal(k)) items.spawnFromNet(ev.item as ItemType, k, ev.x, ev.z, ev.y, ev.heading, ev.speed);
+    } else if (ev.t === 'hit') {
+      if (!isLocal(k)) { k.spinTimer = Math.max(k.spinTimer, 1.3); k.drifting = 0; }
+    } else if (ev.t === 'fin') {
+      if (!k.finished) { k.finished = true; k.finishTime = ev.time; }
+    }
+  }
+
+  function connect(code: string, isCreator: boolean) {
+    if (net) return;
+    const name = (nameInput.value.trim() || 'プレイヤー').slice(0, 10);
+    localStorage.setItem('hk.name', name);
+    try {
+      net = new NetSession(code, name, isCreator, {
+        onLobby: applyLobby, onStart: beginOnlineRace, onPose: applyPoses,
+        onEvent: applyEvent, onPeers: renderLobby,
+      });
+    } catch (e) {
+      netNote2.textContent = `接続できませんでした: ${e}`;
+      return;
+    }
+    onlineHome.style.display = 'none';
+    onlineRoom.style.display = 'block';
+    roomCodeEl.textContent = code;
+    startBtn.style.display = 'none';
+    renderLobby();
+    // 動作確認用 (tools/nettest.mjs が読む)
+    (window as never as Record<string, unknown>).__net = () => ({
+      code, slot: mySlot, host: net?.isHost, started: net?.started, order: net?.order ?? [],
+      labels: labels.filter(Boolean).length,
+      karts: karts.map((k, i) => ({ i, name: k.def.name, x: Math.round(k.x), z: Math.round(k.z), lap: k.lap, fromNet: k.hasNet })),
+    });
+    // 1 人でも部屋を開けるよう、自分がホストなら座席を配る
+    setTimeout(() => net?.publishLobby(), 300);
+  }
+
+  byId<HTMLButtonElement>('createBtn').onclick = () => connect(makeRoomCode(), true);
+  byId<HTMLButtonElement>('joinBtn').onclick = () => {
+    const code = normalizeRoomCode(roomInput.value);
+    if (code.length < 4) { roomInput.focus(); return; }
+    connect(code, false);
+  };
+  byId<HTMLButtonElement>('copyBtn').onclick = async () => {
+    const url = new URL(location.href);
+    url.searchParams.set('room', net?.code ?? '');
+    try { await navigator.clipboard.writeText(url.toString()); byId('copyBtn').textContent = 'コピーしました'; }
+    catch { byId('copyBtn').textContent = url.toString(); }
+  };
+  goBtn.onclick = () => net?.startRace();
+  byId<HTMLButtonElement>('leaveBtn').onclick = () => { net?.leave(); location.reload(); };
 
   // デバッグ: ?debug=1&idx=<サンプル番号>&wp=<経由地>&cam=<0..3> でカウントダウン無しに任意地点から開始
   if (params.get('debug')) {
@@ -273,6 +450,9 @@ async function main() {
   // デバッグ: steps=N で 1 フレームに N 回 (1/60s) 物理更新, ai=1 でプレイヤーも AI 操作
   const debugSteps = Number(params.get('steps') ?? 0);
   const debugAi = params.get('ai') === '1';
+  // 位置の送信間隔。上げると滑らかになるが通信量が増える
+  const POSE_HZ = 15;
+  let poseTimer = 0;
   const idleInput = { throttle: 0, brake: 0, steer: 0, drift: false, item: false, lookBack: false };
   function frame(now: number) {
     requestAnimationFrame(frame);
@@ -309,6 +489,24 @@ async function main() {
     const pin = racing ? input.read() : (input.read(), idleInput);
     if (debugSteps > 0 && racing) { for (let i = 0; i < debugSteps; i++) simulate(1 / 60, pin, racing); }
     else simulate(dt, pin, racing);
+    // 自分が動かしているカートの位置を配る (15Hz)
+    if (net?.started) {
+      poseTimer += dt;
+      if (poseTimer >= 1 / POSE_HZ) {
+        poseTimer = 0;
+        const out: Pose[] = [];
+        for (let i = 0; i < karts.length; i++) {
+          const k = karts[i];
+          if (!isLocal(k)) continue;
+          out.push({
+            slot: i, x: k.x, z: k.z, y: k.y, heading: k.heading, speed: k.speed,
+            drifting: k.drifting, spin: k.spinTimer, lap: k.lap, s: k.s,
+            boost: k.boostTimer, star: k.starTimer, finished: 0,
+          });
+        }
+        net.sendPoses(out);
+      }
+    }
     // カメラ
     updateCamera(dt, pin.lookBack);
     updateSun(player.mesh.position);
@@ -321,9 +519,18 @@ async function main() {
     if (racing) raceTime += dt;
     rail.update(dt);
     for (const k of karts) {
+      // 他人が動かしているカートは受信位置へ寄せるだけ (物理を回すと相手とずれる)
+      if (!isLocal(k)) { k.netApply(dt, track); continue; }
       let inp = pin;
       if (!k.def.isPlayer || k.finished || debugAi) inp = racing ? k.aiInput(dt, track, karts, player, rand) : idleInput;
-      if (inp.item && racing) items.use(k, itemEvents);
+      if (inp.item && racing) {
+        const held = k.item;
+        items.use(k, itemEvents);
+        // 使えたときだけ配る (ルーレット中や手ぶらのときは何も起きない)
+        if (net?.started && held && !k.item) {
+          net.emit({ t: 'use', slot: karts.indexOf(k), item: held, x: k.x, z: k.z, y: k.y, heading: k.heading, speed: k.speed });
+        }
+      }
       k.update(dt, racing ? inp : idleInput, track, kartEvents);
     }
     // カート同士の衝突
@@ -334,9 +541,13 @@ async function main() {
       if (d2 < 2.3 * 2.3 && d2 > 0.0001) {
         const d = Math.sqrt(d2), push = (2.3 - d) / 2;
         const nx = dx / d, nz = dz / d;
-        a.x -= nx * push; a.z -= nz * push; b.x += nx * push; b.z += nz * push;
-        if (a.invincible && !b.invincible && b.spinTimer <= 0) { b.spinTimer = 1.2; itemEvents.onHit(b, a); }
-        if (b.invincible && !a.invincible && a.spinTimer <= 0) { a.spinTimer = 1.2; itemEvents.onHit(a, b); }
+        // 相手のカートは持ち主が動かすので、押し返すのは自分の側だけ。
+        // 両方動かすと次の受信で戻されてガタつく。片側だけのときは倍押す。
+        const aL = isLocal(a), bL = isLocal(b);
+        if (aL) { const f = bL ? 1 : 2; a.x -= nx * push * f; a.z -= nz * push * f; }
+        if (bL) { const f = aL ? 1 : 2; b.x += nx * push * f; b.z += nz * push * f; }
+        if (bL && a.invincible && !b.invincible && b.spinTimer <= 0) { b.spinTimer = 1.2; itemEvents.onHit(b, a); }
+        if (aL && b.invincible && !a.invincible && a.spinTimer <= 0) { a.spinTimer = 1.2; itemEvents.onHit(a, b); }
         const avg = (a.speed + b.speed) / 2;
         a.speed = lerp(a.speed, avg, 0.3); b.speed = lerp(b.speed, avg, 0.3);
         if (a.def.isPlayer || b.def.isPlayer) audio.bump();
@@ -345,7 +556,7 @@ async function main() {
     // 路面電車との接触 (広電はコースの真ん中を走る)
     if (racing) {
       for (const k of karts) {
-        if (k.spinTimer > 0 || k.invincible) continue;
+        if (k.spinTimer > 0 || k.invincible || !isLocal(k)) continue;
         // 接触してもスピンするのはカートだけ。電車は減速も停止も折り返しもせず
         // そのまま走り続ける (rail.ts の Train.update は接触を見ていない)。
         if (rail.hitTram(k.x, k.z, 1.3)) {
@@ -355,7 +566,7 @@ async function main() {
         }
       }
     }
-    if (racing) items.update(dt, karts, itemEvents);
+    if (racing) items.update(dt, karts, itemEvents, isLocal);
     // 順位
     const order = [...karts].sort((a, b) => (a.finished && b.finished) ? a.finishTime - b.finishTime : a.finished ? -1 : b.finished ? 1 : b.progress - a.progress);
     order.forEach((k, i) => (k.rank = i + 1));

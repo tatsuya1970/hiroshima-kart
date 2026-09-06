@@ -49,6 +49,21 @@
     #overlay #quality button:hover { background: rgba(255,255,255,.22); }
     #overlay #quality button[aria-pressed="true"] { background: #ffd83d; color: #1b1b1b; border-color: #ffd83d; }
     #qualityNote { opacity: .6; font-size: 12px; }
+    /* ---- オンライン対戦 ---- */
+    #online { margin-top: 18px; font-size: 15px; width: min(560px, 90vw); }
+    #online .row { display: flex; gap: 8px; align-items: center; justify-content: center; flex-wrap: wrap; }
+    #online input { font-size: 17px; padding: 9px 14px; border-radius: 10px; border: 1px solid rgba(255,255,255,.3); background: rgba(255,255,255,.1); color: #fff; width: 150px; text-align: center; }
+    #online input::placeholder { color: rgba(255,255,255,.45); }
+    #overlay #online button { font-size: 15px; font-weight: 700; padding: 9px 20px; border-radius: 12px; background: rgba(255,255,255,.14); border: 1px solid rgba(255,255,255,.3); box-shadow: none; }
+    #overlay #online button:hover { background: rgba(255,255,255,.24); }
+    #overlay #online #goBtn { background: linear-gradient(#ffd83d, #e0a800); color: #22160a; border: none; }
+    #overlay #online #goBtn:disabled { opacity: .45; }
+    #roomCode { font-size: 30px; font-weight: 900; letter-spacing: .3em; color: #ffd83d; }
+    #playerList { list-style: none; padding: 0; margin: 14px auto; max-width: 380px; }
+    #playerList li { display: flex; align-items: center; gap: 10px; padding: 7px 14px; margin: 5px 0; border-radius: 10px; background: rgba(255,255,255,.08); font-size: 16px; }
+    #playerList .dot { width: 14px; height: 14px; border-radius: 50%; flex: none; }
+    #playerList .tag { margin-left: auto; font-size: 12px; opacity: .7; }
+    #netNote { margin-top: 10px; font-size: 13px; opacity: .75; line-height: 1.7; }
     #results { display: none; }
     #results table { margin: 0 auto 20px; border-collapse: collapse; font-size: 20px; }
     #results td { padding: 6px 18px; }
@@ -89,6 +104,23 @@
     </div>
     <button id="startBtn" disabled>読み込み中...</button>
     <div id="progress"><div id="progressBar"></div></div>
+    <div id="online">
+      <div id="onlineHome">
+        <div class="row">
+          <input id="playerName" maxlength="10" placeholder="なまえ" />
+          <button id="createBtn">部屋を作る</button>
+          <input id="roomInput" maxlength="5" placeholder="あいことば" />
+          <button id="joinBtn">参加する</button>
+        </div>
+        <div id="netNote">友だちと同じ「あいことば」で入ると、最大 8 人で対戦できます。通信はブラウザ同士の直接接続です（サーバーはありません）。</div>
+      </div>
+      <div id="onlineRoom" style="display:none">
+        <div class="row">あいことば <span id="roomCode"></span> <button id="copyBtn">リンクをコピー</button></div>
+        <ul id="playerList"></ul>
+        <div class="row"><button id="goBtn" disabled>レースを開始</button> <button id="leaveBtn">部屋を出る</button></div>
+        <div id="netNote2" class="row" style="margin-top:10px;font-size:13px;opacity:.75"></div>
+      </div>
+    </div>
     <div id="quality">
       画質 <span id="qualityBtns"></span>
       <span id="qualityNote">環境に合わせて自動選択しています。カクつく場合は下げてください</span>
