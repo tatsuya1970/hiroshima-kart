@@ -5,7 +5,7 @@ import { Track } from './track';
 import { buildBuildings, type BuildingsData } from './buildings';
 import { Kart, type RacerDef, type ItemType } from './kart';
 import { ItemSystem } from './items';
-import { NetSession, makeRoomCode, normalizeRoomCode, type LobbyInfo, type NetEvent, type Pose } from './net';
+import { NetSession, openRoom, normalizeRoomCode, type LobbyInfo, type NetEvent, type Pose, type RoomKind } from './net';
 import { Hud, drawCourseMap } from './hud';
 import { InputManager } from './input';
 import { AudioSystem } from './audio';
@@ -272,17 +272,18 @@ async function main() {
   const onlineHome = byId<HTMLDivElement>('onlineHome');
   const onlineRoom = byId<HTMLDivElement>('onlineRoom');
   const nameInput = byId<HTMLInputElement>('playerName');
-  const roomInput = byId<HTMLInputElement>('roomInput');
-  const roomCodeEl = byId<HTMLSpanElement>('roomCode');
   const playerList = byId<HTMLUListElement>('playerList');
   const goBtn = byId<HTMLButtonElement>('goBtn');
   const netNote2 = byId<HTMLDivElement>('netNote2');
+  const countNum = byId<HTMLSpanElement>('countNum');
+  const countLabel = byId<HTMLSpanElement>('countLabel');
   const esc = (s: string) => s.replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]!));
 
   nameInput.value = localStorage.getItem('hk.name') ?? '';
-  // ?room=XXXXX 付きのリンクで開いたら、あいことばを埋めておく
+  // ?room=XXXXX 付きのリンクなら合言葉の部屋へ (UI からは隠したが経路は残してある)
   const linkRoom = normalizeRoomCode(params.get('room') ?? '');
-  if (linkRoom) roomInput.value = linkRoom;
+  /** 公開ロビーの締切 (ミリ秒)。合言葉の部屋では 0 = カウントダウン無し */
+  let deadline = 0;
 
   /** 名前の吹き出し (誰がどのカートか分かるように) */
   const labels: (THREE.Sprite | null)[] = karts.map(() => null);
@@ -319,11 +320,25 @@ async function main() {
       return `<li><span class="dot" style="background:${col}"></span>${esc(net!.names[id] ?? '接続中...')}<span class="tag">${tags}</span></li>`;
     }).join('');
     const ai = Math.max(0, RACERS.length - ids.length);
-    netNote2.textContent = net.isHost
-      ? `あなたがホストです。残り ${ai} 台は AI が走ります。`
-      : 'ホストが開始するのを待っています。';
+    netNote2.textContent = `いま ${ids.length} 人。空いた ${ai} 台は AI が走ります。`
+      + (net.isHost ? '' : ' 発走はホストの合図で揃えます。');
     goBtn.disabled = !net.isHost || net.started;
   }
+
+  /**
+   * 公開ロビーのカウントダウン。締切は壁時計から全員が同じ値を出せるので、
+   * 表示は各自で進める。発走の合図だけはホストが出して足並みを揃え、
+   * 締切を 2 秒過ぎても合図が来なければ自分で始める (ホストが落ちたとき用)。
+   */
+  function tickCountdown() {
+    if (!net || net.started || !deadline) return;
+    const left = (deadline - Date.now()) / 1000;
+    countNum.textContent = String(Math.max(0, Math.ceil(left)));
+    countNum.classList.toggle('soon', left <= 5);
+    if (left <= 0 && net.isHost) net.startRace();
+    else if (left <= -2) net.startLocally();
+  }
+  setInterval(tickCountdown, 200);
 
   function applyLobby(info: LobbyInfo) {
     if (!net) return;
@@ -340,7 +355,24 @@ async function main() {
 
   function beginOnlineRace() {
     if (!net) return;
-    mySlot = Math.max(0, net.mySlot);
+    // 席が決まる前に発走したら (相手との接続が間に合わなかった) オンラインは
+    // あきらめて 1 人で走る。席が無いまま 0 番を名乗ると、ホストとカートを
+    // 奪い合ってしまう。
+    if (net.mySlot < 0) {
+      net.leave();
+      net = null;
+      mySlot = 0;
+      player = karts[0];
+      karts[0].def.isPlayer = true;
+      for (let i = 0; i < karts.length; i++) setLabel(i, '');
+      hud.showLandmark('接続が間に合わないので 1 人で走ります');
+      overlay.style.display = 'none';
+      audio.start();
+      state = 'countdown'; countdown = 3.999;
+      audio.countdown();
+      return;
+    }
+    mySlot = net.mySlot;
     player = karts[mySlot];
     for (let i = 0; i < karts.length; i++) karts[i].def.isPlayer = i === mySlot;
     overlay.style.display = 'none';
@@ -376,12 +408,12 @@ async function main() {
     }
   }
 
-  function connect(code: string, isCreator: boolean) {
+  function connect(code: string, kind: RoomKind) {
     if (net) return;
     const name = (nameInput.value.trim() || 'プレイヤー').slice(0, 10);
     localStorage.setItem('hk.name', name);
     try {
-      net = new NetSession(code, name, isCreator, {
+      net = new NetSession(code, name, kind, {
         onLobby: applyLobby, onStart: beginOnlineRace, onPose: applyPoses,
         onEvent: applyEvent, onPeers: renderLobby,
       });
@@ -391,9 +423,12 @@ async function main() {
     }
     onlineHome.style.display = 'none';
     onlineRoom.style.display = 'block';
-    roomCodeEl.textContent = code;
     startBtn.style.display = 'none';
+    // 合言葉の部屋にはカウントダウンが無いので、表示を出しっぱなしにしない
+    countLabel.style.display = deadline ? '' : 'none';
+    countNum.style.display = deadline ? '' : 'none';
     renderLobby();
+    tickCountdown();
     // 動作確認用 (tools/nettest.mjs が読む)
     (window as never as Record<string, unknown>).__net = () => ({
       code, slot: mySlot, host: net?.isHost, started: net?.started, order: net?.order ?? [],
@@ -404,11 +439,25 @@ async function main() {
     setTimeout(() => net?.publishLobby(), 300);
   }
 
-  byId<HTMLButtonElement>('createBtn').onclick = () => connect(makeRoomCode(), true);
+  // 公開ロビー: 押すとすぐ入り、時計で決まる締切に発走する
+  byId<HTMLButtonElement>('openBtn').onclick = () => {
+    const room = openRoom();
+    deadline = room.deadline;
+    connect(room.code, 'open');
+  };
+  goBtn.onclick = () => net?.startRace();
+  byId<HTMLButtonElement>('leaveBtn').onclick = () => { net?.leave(); location.reload(); };
+  // ?room=XXXXX のリンクなら合言葉の部屋へ直接入る (UI は隠してある)
+  if (linkRoom) { deadline = 0; connect(linkRoom, 'join'); }
+
+  /* 合言葉で部屋を作る方式。公開ロビーに切り替えたので止めてあります。
+     戻すときは index.html のボタンと合わせてコメントを外してください。
+  byId<HTMLButtonElement>('createBtn').onclick = () => { deadline = 0; connect(makeRoomCode(), 'create'); };
   byId<HTMLButtonElement>('joinBtn').onclick = () => {
     const code = normalizeRoomCode(roomInput.value);
     if (code.length < 4) { roomInput.focus(); return; }
-    connect(code, false);
+    deadline = 0;
+    connect(code, 'join');
   };
   byId<HTMLButtonElement>('copyBtn').onclick = async () => {
     const url = new URL(location.href);
@@ -416,8 +465,7 @@ async function main() {
     try { await navigator.clipboard.writeText(url.toString()); byId('copyBtn').textContent = 'コピーしました'; }
     catch { byId('copyBtn').textContent = url.toString(); }
   };
-  goBtn.onclick = () => net?.startRace();
-  byId<HTMLButtonElement>('leaveBtn').onclick = () => { net?.leave(); location.reload(); };
+  */
 
   // デバッグ: ?debug=1&idx=<サンプル番号>&wp=<経由地>&cam=<0..3> でカウントダウン無しに任意地点から開始
   if (params.get('debug')) {
@@ -452,6 +500,7 @@ async function main() {
   const debugAi = params.get('ai') === '1';
   // 位置の送信間隔。上げると滑らかになるが通信量が増える
   const POSE_HZ = 15;
+  /** 前回位置を送った時刻 (performance.now) */
   let poseTimer = 0;
   const idleInput = { throttle: 0, brake: 0, steer: 0, drift: false, item: false, lookBack: false };
   function frame(now: number) {
@@ -489,11 +538,12 @@ async function main() {
     const pin = racing ? input.read() : (input.read(), idleInput);
     if (debugSteps > 0 && racing) { for (let i = 0; i < debugSteps; i++) simulate(1 / 60, pin, racing); }
     else simulate(dt, pin, racing);
-    // 自分が動かしているカートの位置を配る (15Hz)
+    // 自分が動かしているカートの位置を配る (15Hz)。
+    // 間隔は dt ではなく実時間で測る。dt は 0.05 秒で頭打ちにしてあるので、
+    // fps が落ちた端末では送信間隔まで一緒に間延びしてしまう。
     if (net?.started) {
-      poseTimer += dt;
-      if (poseTimer >= 1 / POSE_HZ) {
-        poseTimer = 0;
+      if (now - poseTimer >= 1000 / POSE_HZ) {
+        poseTimer = now;
         const out: Pose[] = [];
         for (let i = 0; i < karts.length; i++) {
           const k = karts[i];

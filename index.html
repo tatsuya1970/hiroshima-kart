@@ -59,6 +59,9 @@
     #overlay #online #goBtn { background: linear-gradient(#ffd83d, #e0a800); color: #22160a; border: none; }
     #overlay #online #goBtn:disabled { opacity: .45; }
     #roomCode { font-size: 30px; font-weight: 900; letter-spacing: .3em; color: #ffd83d; }
+    #countLabel { font-size: 16px; opacity: .8; }
+    #countNum { font-size: 44px; font-weight: 900; font-style: italic; color: #ffd83d; min-width: 74px; display: inline-block; text-align: center; }
+    #countNum.soon { color: #ff7a5a; }
     #playerList { list-style: none; padding: 0; margin: 14px auto; max-width: 380px; }
     #playerList li { display: flex; align-items: center; gap: 10px; padding: 7px 14px; margin: 5px 0; border-radius: 10px; background: rgba(255,255,255,.08); font-size: 16px; }
     #playerList .dot { width: 14px; height: 14px; border-radius: 50%; flex: none; }
@@ -108,17 +111,29 @@
       <div id="onlineHome">
         <div class="row">
           <input id="playerName" maxlength="10" placeholder="なまえ" />
+          <button id="openBtn">みんなで走る</button>
+        </div>
+        <div id="netNote">押すとすぐロビーに入り、<b>30 秒で発走</b>します。集まった人どうしで、最大 8 人。空いた枠は AI が走ります。通信はブラウザ同士の直接接続です（サーバーはありません）。</div>
+        <!--
+          合言葉で部屋を作る方式は、公開ロビーに切り替えたので隠してあります。
+          同時に遊ぶ人が少ないうちは、待ち時間が読めるほうが遊びやすいためです。
+          戻すときはここと src/main.ts の「合言葉」の箇所のコメントを外してください。
+          URL に ?room=XXXXX を付けると、今でも合言葉の部屋に直接入れます。
+        <div class="row">
           <button id="createBtn">部屋を作る</button>
           <input id="roomInput" maxlength="5" placeholder="あいことば" />
           <button id="joinBtn">参加する</button>
         </div>
-        <div id="netNote">友だちと同じ「あいことば」で入ると、最大 8 人で対戦できます。通信はブラウザ同士の直接接続です（サーバーはありません）。</div>
+        -->
       </div>
       <div id="onlineRoom" style="display:none">
-        <div class="row">あいことば <span id="roomCode"></span> <button id="copyBtn">リンクをコピー</button></div>
+        <div class="row"><span id="countLabel">発走まで</span> <span id="countNum">30</span></div>
         <ul id="playerList"></ul>
-        <div class="row"><button id="goBtn" disabled>レースを開始</button> <button id="leaveBtn">部屋を出る</button></div>
+        <div class="row"><button id="goBtn" disabled>すぐ始める</button> <button id="leaveBtn">やめる</button></div>
         <div id="netNote2" class="row" style="margin-top:10px;font-size:13px;opacity:.75"></div>
+        <!-- 合言葉の表示 (公開ロビーでは使いません)
+        <div class="row">あいことば <span id="roomCode"></span> <button id="copyBtn">リンクをコピー</button></div>
+        -->
       </div>
     </div>
     <div id="quality">

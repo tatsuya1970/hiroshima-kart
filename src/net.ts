@@ -82,6 +82,29 @@ export function normalizeRoomCode(v: string): string {
   return v.trim().toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 5);
 }
 
+/** 公開ロビーの 1 枠の長さ (秒)。この境目でレースが始まる */
+export const OPEN_PERIOD = 30;
+/** これより締切が近い枠には入れず、次の枠へ回す (入った瞬間に発走しないように) */
+const OPEN_MIN_WAIT = 12;
+
+/**
+ * 公開ロビーの部屋名と締切。
+ *
+ * 壁時計を OPEN_PERIOD 秒ごとに区切り、同じ区間に来た人が同じ部屋に入る。
+ * 部屋名が時刻から決まるので、遅れて来た人は自動的に次のレースの部屋へ回り、
+ * 走っているレースに紛れ込まない。締切も全員が同じ計算で出せる。
+ */
+export function openRoom(now = Date.now()): { code: string; deadline: number } {
+  const sec = now / 1000;
+  let bucket = Math.floor(sec / OPEN_PERIOD);
+  let deadline = (bucket + 1) * OPEN_PERIOD;
+  if (deadline - sec < OPEN_MIN_WAIT) { bucket += 1; deadline += OPEN_PERIOD; }
+  return { code: `OPEN${bucket}`, deadline: deadline * 1000 };
+}
+
+/** create=合言葉で部屋を作った / join=合言葉で参加した / open=公開ロビー */
+export type RoomKind = 'create' | 'join' | 'open';
+
 export class NetSession {
   readonly code: string;
   readonly selfId = selfId;
@@ -94,6 +117,7 @@ export class NetSession {
   /** 部屋を作った人 (ホストはここから決める) */
   private creators: Record<string, boolean> = {};
   private joinedAt = Date.now();
+  private kind: RoomKind;
   /** ホストが決めた座席順。ロビー受信まで空 */
   order: string[] = [];
   seed = 20240803;
@@ -106,12 +130,13 @@ export class NetSession {
   private pose: MessageAction<JsonValue>;
   private ev: MessageAction<JsonValue>;
 
-  constructor(code: string, name: string, isCreator: boolean, handlers: NetHandlers) {
+  constructor(code: string, name: string, kind: RoomKind, handlers: NetHandlers) {
     this.code = code;
     this.myName = name;
     this.handlers = handlers;
     this.names[selfId] = name;
-    this.creators[selfId] = isCreator;
+    this.kind = kind;
+    this.creators[selfId] = kind === 'create';
     this.room = joinRoom({ appId: APP_ID }, `hk-${code}`);
 
     this.hi = this.room.makeAction<JsonValue>('hi', {
@@ -185,7 +210,8 @@ export class NetSession {
     const here = this.peerIds();
     const made = here.filter(id => this.creators[id]);
     if (made.length) return made[0];
-    if (!this.creators[selfId] && Date.now() - this.joinedAt < HOST_GRACE_MS) return '';
+    // 公開ロビーには作成者がいないので待つ意味がない
+    if (this.kind === 'join' && Date.now() - this.joinedAt < HOST_GRACE_MS) return '';
     return here[0];
   }
 
@@ -222,6 +248,16 @@ export class NetSession {
     if (!this.isHost || this.started) return;
     this.started = true;
     void this.go.send({});
+    this.handlers.onStart();
+  }
+
+  /**
+   * ホストからの合図を待たずに自分だけ始める。
+   * 締切を過ぎても go が届かないとき (ホストが落ちた・回線が詰まった) の保険。
+   */
+  startLocally(): void {
+    if (this.started) return;
+    this.started = true;
     this.handlers.onStart();
   }
 
