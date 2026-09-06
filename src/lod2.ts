@@ -2,6 +2,7 @@
 import * as THREE from 'three';
 import { atlasFile, type QualityPreset } from './quality';
 import { assetUrl } from './geo';
+import { t } from './i18n';
 
 export interface Lod2Meta {
   vertexCount: number;
@@ -13,7 +14,7 @@ export interface Lod2Meta {
 
 export async function loadLod2(preset: QualityPreset, onProgress?: (p: number, label?: string) => void): Promise<{ group: THREE.Group; meta: Lod2Meta; triangles: number }> {
   const meta: Lod2Meta = await (await fetch(assetUrl('data/lod2.json'))).json();
-  onProgress?.(0.1, 'LOD2 形状を読み込み中...');
+  onProgress?.(0.1, t('load.lod2Shape'));
   const buf = await (await fetch(assetUrl('data/lod2.bin'))).arrayBuffer();
   const n = meta.vertexCount;
   const pos = new Float32Array(buf, 0, n * 3);
@@ -51,7 +52,7 @@ export async function loadLod2(preset: QualityPreset, onProgress?: (p: number, l
     mesh.receiveShadow = true;
     group.add(mesh);
     loaded++;
-    onProgress?.(0.1 + (loaded / meta.groups.length) * 0.9, `LOD2 テクスチャ ${loaded}/${meta.groups.length}`);
+    onProgress?.(0.1 + (loaded / meta.groups.length) * 0.9, t('load.lod2Tex', loaded, meta.groups.length));
   });
   await Promise.all(jobs);
   return { group, meta, triangles: n / 3 };

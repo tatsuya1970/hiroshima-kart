@@ -15,17 +15,18 @@ import { buildGenbakuDome, buildHiroshimaCastle, buildPeaceWing, landmarkBlocksB
 import { loadLod2 } from './lod2';
 import { rng, lerp, clamp, assetUrl, WAYPOINTS, llToXZ } from './geo';
 import { resolveQuality, saveQuality, allPresets, type QualityLevel } from './quality';
+import { t, isJa, setLang, applyDomLang } from './i18n';
 
 const LAPS = 2;
 const RACERS: RacerDef[] = [
-  { name: 'あなた', color: 0xe63946, accent: 0xffffff, isPlayer: true, skill: 1 },
-  { name: 'もみじ', color: 0xd7263d, accent: 0xffd166, isPlayer: false, skill: 0.95 },
-  { name: 'カキ', color: 0x3a86ff, accent: 0xffffff, isPlayer: false, skill: 0.85 },
-  { name: 'おこのみ', color: 0xff9f1c, accent: 0x2b2d42, isPlayer: false, skill: 0.75 },
-  { name: 'レモン', color: 0xffd60a, accent: 0x1b4332, isPlayer: false, skill: 0.7 },
-  { name: 'しゃもじ', color: 0x9b5de5, accent: 0xf1faee, isPlayer: false, skill: 0.6 },
-  { name: 'でんしゃ', color: 0x2a9d8f, accent: 0xe9c46a, isPlayer: false, skill: 0.55 },
-  { name: 'あなご', color: 0x6c757d, accent: 0xf4a261, isPlayer: false, skill: 0.45 },
+  { name: isJa ? 'あなた' : 'You', color: 0xe63946, accent: 0xffffff, isPlayer: true, skill: 1 },
+  { name: isJa ? 'もみじ' : 'Momiji', color: 0xd7263d, accent: 0xffd166, isPlayer: false, skill: 0.95 },
+  { name: isJa ? 'カキ' : 'Oyster', color: 0x3a86ff, accent: 0xffffff, isPlayer: false, skill: 0.85 },
+  { name: isJa ? 'おこのみ' : 'Okonomi', color: 0xff9f1c, accent: 0x2b2d42, isPlayer: false, skill: 0.75 },
+  { name: isJa ? 'レモン' : 'Lemon', color: 0xffd60a, accent: 0x1b4332, isPlayer: false, skill: 0.7 },
+  { name: isJa ? 'しゃもじ' : 'Shamoji', color: 0x9b5de5, accent: 0xf1faee, isPlayer: false, skill: 0.6 },
+  { name: isJa ? 'でんしゃ' : 'Tram', color: 0x2a9d8f, accent: 0xe9c46a, isPlayer: false, skill: 0.55 },
+  { name: isJa ? 'あなご' : 'Anago', color: 0x6c757d, accent: 0xf4a261, isPlayer: false, skill: 0.45 },
 ];
 
 type State = 'loading' | 'title' | 'countdown' | 'race' | 'finish';
@@ -53,7 +54,22 @@ function setupQualityButtons(current: QualityLevel): void {
   }
 }
 
+/**
+ * 言語の切り替えボタン。navigator.language で自動判定しているが、
+ * 日本語環境から英語で見たい人 (その逆も) がいるので必ず出す。
+ * 地名の看板やアトラスを作り直す必要があるので、切り替えは再読み込みで反映する。
+ */
+function setupLangButton(): void {
+  const host = document.getElementById('langSwitch');
+  if (!host) return;
+  const b = document.createElement('button');
+  b.textContent = t('lang.other');
+  b.addEventListener('click', () => setLang(isJa ? 'en' : 'ja'));
+  host.appendChild(b);
+}
+
 async function main() {
+  applyDomLang();
   const canvas = document.getElementById('game') as HTMLCanvasElement;
   const startBtn = document.getElementById('startBtn') as HTMLButtonElement;
   const openBtn = document.getElementById('openBtn') as HTMLButtonElement;
@@ -69,6 +85,7 @@ async function main() {
   const quality = resolveQuality(dbg);
   console.log(`画質: ${quality.level} (アトラス ${quality.halfAtlas ? '2048' : '4096'}px / 影 ${quality.shadows ? 'on' : 'off'})`);
   setupQualityButtons(quality.level);
+  setupLangButton();
   // 低画質では MSAA も切る (内蔵 GPU では帯域を食う)
   const renderer = new THREE.WebGLRenderer({ canvas, antialias: quality.level !== 'low', powerPreference: 'high-performance' });
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, quality.maxPixelRatio));
@@ -107,22 +124,22 @@ async function main() {
   scene.add(sky);
 
   // ---- データ読み込み ----
-  setProgress(0.05, '地形データ読み込み中...');
+  setProgress(0.05, t('load.terrain'));
   const terrain: Terrain = await loadTerrain(p => setProgress(0.05 + p * 0.15));
-  setProgress(0.2, '建物データ読み込み中...');
+  setProgress(0.2, t('load.buildings'));
   const [bData, rData] = await Promise.all([
     (await fetch(assetUrl('data/buildings.json'))).json() as Promise<BuildingsData>,
     (await fetch(assetUrl('data/roads.json'))).json() as Promise<{ items: number[][] }>,
   ]);
-  setProgress(0.38, '公園・濠を整地中...');
+  setProgress(0.38, t('load.parks'));
   await nextFrame();
   // 濠を掘り、公園内の誤った水面を埋める。走行線の標高にも効かせるため Track より先。
   const parks = new Parks(terrain);
   parks.carve();
-  setProgress(0.4, 'コース生成中...');
+  setProgress(0.4, t('load.course'));
   await nextFrame();
   const track = new Track(terrain);
-  setProgress(0.44, '地形生成中...');
+  setProgress(0.44, t('load.ground'));
   await nextFrame();
   // 芝・濠 → 道路 → コース帯 の順に重ねる
   scene.add(terrain.build(
@@ -133,11 +150,11 @@ async function main() {
   scene.add(makeHills(terrain));
   // デバッグ用トグル: ?norail=1 / ?nolod2=1 / ?nodome=1 / ?nobldg=1
   const params = new URLSearchParams(location.search);
-  setProgress(0.5, '鉄道・軌道を敷設中...');
+  setProgress(0.5, t('load.rail'));
   await nextFrame();
   const rail: RailSystem = buildRail(terrain, track);
   if (!params.get('norail')) scene.add(rail.group);
-  setProgress(0.56, `建物 ${bData.count} 棟を生成中...`);
+  setProgress(0.56, t('load.bldg', bData.count));
   await nextFrame();
   let stat = '';
   const bldgGroup = buildBuildings(bData, track, terrain, s => (stat = s), ring => rail.blocksBuilding(ring) || landmarkBlocksBuilding(ring) || parks.blocksBuilding(ring));
@@ -154,7 +171,7 @@ async function main() {
       console.warn('LOD2 の読み込みに失敗しました', e);
     }
   }
-  setProgress(0.94, '原爆ドーム・広島城を配置中...');
+  setProgress(0.94, t('load.landmarks'));
   await nextFrame();
   if (!params.get('nodome')) {
     scene.add(buildGenbakuDome(terrain));
@@ -208,7 +225,7 @@ async function main() {
     onLap: (k: Kart) => {
       if (!k.def.isPlayer) { if (k.lap > LAPS && !k.finished) { k.finished = true; k.finishTime = raceTime; } return; }
       if (k.lap > LAPS) { if (!k.finished) finishRace(); }
-      else if (k.lap >= 2) { hud.showCenter(`LAP ${k.lap}`, 1.2); audio.lap(); if (k.lap === LAPS) hud.showLandmark('ファイナルラップ!'); }
+      else if (k.lap >= 2) { hud.showCenter(`LAP ${k.lap}`, 1.2); audio.lap(); if (k.lap === LAPS) hud.showLandmark(t('race.finalLap')); }
     },
     onBoost: (k: Kart) => { if (k.def.isPlayer) audio.boost(); },
     onBump: (k: Kart, f: number) => { if (k.def.isPlayer && f > 8) audio.bump(); },
@@ -239,7 +256,7 @@ async function main() {
     if (net?.started) net.emit({ t: 'fin', slot: mySlot, time: raceTime });
     state = 'finish';
     audio.finish();
-    hud.showCenter('FINISH!', 3);
+    hud.showCenter(t('race.finish'), 3);
     setTimeout(showResults, 2500);
   }
   function showResults() {
@@ -255,7 +272,7 @@ async function main() {
     mainButtons.style.display = '';
     openBtn.style.display = 'none';   // リザルトでは「もう一度走る」だけ出す
     startBtn.style.display = '';
-    startBtn.textContent = 'もう一度走る';
+    startBtn.textContent = t('btn.again');
     startBtn.disabled = false;
     startBtn.onclick = () => location.reload();
   }
@@ -263,7 +280,8 @@ async function main() {
 
   startBtn.disabled = false;
   openBtn.disabled = false;
-  startBtn.textContent = '1人PLAY';
+  startBtn.textContent = t('btn.solo');
+  openBtn.textContent = t('btn.online');
   startBtn.onclick = () => {
     overlay.style.display = 'none';
     audio.start();
@@ -321,12 +339,11 @@ async function main() {
     const ids = net.order.length ? net.order : net.peerIds();
     playerList.innerHTML = ids.map((id, i) => {
       const col = '#' + RACERS[i % RACERS.length].color.toString(16).padStart(6, '0');
-      const tags = [id === net!.selfId ? 'あなた' : '', id === hostId ? 'ホスト' : ''].filter(Boolean).join(' / ');
-      return `<li><span class="dot" style="background:${col}"></span>${esc(net!.names[id] ?? '接続中...')}<span class="tag">${tags}</span></li>`;
+      const tags = [id === net!.selfId ? t('lobby.you') : '', id === hostId ? t('lobby.host') : ''].filter(Boolean).join(' / ');
+      return `<li><span class="dot" style="background:${col}"></span>${esc(net!.names[id] ?? t('lobby.connecting'))}<span class="tag">${tags}</span></li>`;
     }).join('');
     const ai = Math.max(0, RACERS.length - ids.length);
-    netNote2.textContent = `いま ${ids.length} 人。空いた ${ai} 台は AI が走ります。`
-      + (net.isHost ? '' : ' 発走はホストの合図で揃えます。');
+    netNote2.textContent = t('lobby.status', ids.length, ai) + (net.isHost ? '' : t('lobby.waitHost'));
     goBtn.disabled = !net.isHost || net.started;
   }
 
@@ -370,7 +387,7 @@ async function main() {
       player = karts[0];
       karts[0].def.isPlayer = true;
       for (let i = 0; i < karts.length; i++) setLabel(i, '');
-      hud.showLandmark('接続が間に合わないので 1 人で走ります');
+      hud.showLandmark(t('race.soloFallback'));
       overlay.style.display = 'none';
       audio.start();
       state = 'countdown'; countdown = 3.999;
@@ -423,7 +440,7 @@ async function main() {
         onEvent: applyEvent, onPeers: renderLobby,
       });
     } catch (e) {
-      netNote2.textContent = `接続できませんでした: ${e}`;
+      netNote2.textContent = t('net.failed', String(e));
       return;
     }
     onlineHome.style.display = 'none';
@@ -535,7 +552,7 @@ async function main() {
       const cur = Math.ceil(countdown);
       if (cur !== prev) {
         if (cur >= 1) { hud.showCenter(String(cur), 0.9); audio.countdown(); }
-        else { hud.showCenter('GO!', 1, '#7cff5a'); audio.countdown(true); state = 'race'; raceTime = 0; }
+        else { hud.showCenter(t('race.go'), 1, '#7cff5a'); audio.countdown(true); state = 'race'; raceTime = 0; }
       } else if (prev === 4 && countdown < 3) { /* noop */ }
       if (countdown > 3) { /* 表示待ち */ } else if (cur >= 1 && hud) { /* number shown on change */ }
     }
@@ -617,7 +634,7 @@ async function main() {
         if (rail.hitTram(k.x, k.z, 1.3)) {
           k.spinTimer = 1.5; k.drifting = 0; k.speed *= 0.25;
           itemEvents.onHit(k, null);
-          if (k.def.isPlayer) hud.showLandmark('路面電車に注意!');
+          if (k.def.isPlayer) hud.showLandmark(t('race.tram'));
         }
       }
     }
@@ -711,4 +728,4 @@ function makeHills(terrain: Terrain): THREE.Mesh {
   return mesh;
 }
 
-main().catch(e => { console.error(e); const b = document.getElementById('startBtn')!; b.textContent = 'エラー: ' + e.message; });
+main().catch(e => { console.error(e); const b = document.getElementById('startBtn')!; b.textContent = t('load.error', e.message); });

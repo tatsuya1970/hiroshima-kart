@@ -124,7 +124,7 @@ export class Hud {
   showLandmark(name: string) { this.landmark.textContent = name; this.landmark.style.opacity = '1'; this.landmarkTimer = 2.2; }
   showCenter(text: string, dur = 1, color = '#ffd83d') { this.center.textContent = text; this.center.style.color = color; this.center.style.opacity = '1'; this.centerTimer = dur; }
 
-  update(dt: number, player: Kart, karts: Kart[], raceTime: number, track: Track, labels: { idx: number; name: string; short: string }[]) {
+  update(dt: number, player: Kart, karts: Kart[], raceTime: number, track: Track, labels: { idx: number; name: string; sub: string; short: string }[]) {
     this.lapNum.textContent = String(Math.max(1, Math.min(player.lap, Number(this.lapTotal.textContent))));
     const t = Math.max(0, raceTime);
     const m = Math.floor(t / 60), s = t - m * 60;

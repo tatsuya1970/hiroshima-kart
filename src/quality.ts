@@ -4,6 +4,8 @@
 // 非圧縮 RGBA + ミップで約 511MB あり、内蔵 GPU や共有メモリ環境では破綻する。
 // 2048px 版 (`*_2k.jpg`) に落とすと約 128MB、転送量も 15.3MB -> 3.2MB になる。
 
+import { t } from './i18n';
+
 export type QualityLevel = 'low' | 'medium' | 'high';
 
 export interface QualityPreset {
@@ -22,17 +24,17 @@ export interface QualityPreset {
 
 const PRESETS: Record<QualityLevel, QualityPreset> = {
   high: {
-    level: 'high', label: '高 (専用GPU向け)',
+    level: 'high', label: t('q.high'),
     halfAtlas: false, shadows: true, shadowMapSize: 2048,
     maxPixelRatio: 1.5, lod2: true, drawDistance: 4200,
   },
   medium: {
-    level: 'medium', label: '中 (内蔵GPU向け)',
+    level: 'medium', label: t('q.medium'),
     halfAtlas: true, shadows: true, shadowMapSize: 1024,
     maxPixelRatio: 1.0, lod2: true, drawDistance: 3000,
   },
   low: {
-    level: 'low', label: '低 (最軽量)',
+    level: 'low', label: t('q.low'),
     halfAtlas: true, shadows: false, shadowMapSize: 512,
     maxPixelRatio: 1.0, lod2: true, drawDistance: 2000,
   },

@@ -4,6 +4,7 @@ import type { Track } from './track';
 import type { Terrain } from './terrain';
 import { makeWallTexture, makeRoofTexture } from './textures';
 import { hashInt } from './geo';
+import { t } from './i18n';
 
 export interface BuildingsData {
   count: number;
@@ -84,7 +85,7 @@ export function buildBuildings(data: BuildingsData, track: Track, terrain: Terra
     }
     kept++;
   }
-  onStat?.(`建物 ${kept} 棟を配置 (コース上 ${removed} 棟を除去)`);
+  onStat?.(t('load.bldgDone', kept, removed));
 
   for (let v = 0; v < VARIANTS; v++) {
     if (wallPos[v].length === 0) continue;

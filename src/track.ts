@@ -1,6 +1,7 @@
 // コース: ウェイポイント → Catmull-Rom スプライン → 等間隔サンプル
 import * as THREE from 'three';
 import { ROAD_WIDTH, COURSE_PATH } from './geo';
+import { isJa } from './i18n';
 import type { Terrain } from './terrain';
 import { makeRoadTexture, makeCheckerTexture, makeCurbTexture, makeSignTexture, makeBannerTexture } from './textures';
 
@@ -23,8 +24,12 @@ export class Track {
   elev!: Float32Array; // 高架のかさ上げ量 (m)。0 なら地上
   length = 0;
   halfWidth = ROAD_WIDTH / 2;
-  /** name = コース上の看板、short = 地図に描く短い名前 */
-  labels: { idx: number; name: string; short: string }[] = [];
+  /**
+   * name  = コース上の看板の主表記 (選んだ言語)
+   * sub   = その下に小さく出すもう一方の言語
+   * short = 地図に描く短い名前 (選んだ言語)
+   */
+  labels: { idx: number; name: string; sub: string; short: string }[] = [];
   private hash = new Map<number, number[]>();
   private readonly HCELL = 30;
 
@@ -149,7 +154,15 @@ export class Track {
     }
     // ラベル (経路上の位置は build_course.mjs が算出済み)
     for (const l of COURSE_PATH.labels) {
-      if (l.label) this.labels.push({ idx: this.wrap(l.idx), name: l.name, short: l.short ?? l.name });
+      if (!l.label) continue;
+      // 看板は選んだ言語を大きく、もう一方を副題に出す (切り替えても迷わない)
+      const en = l.en ?? l.name;
+      this.labels.push({
+        idx: this.wrap(l.idx),
+        name: isJa ? l.name : en,
+        sub: isJa ? en : l.name,
+        short: isJa ? (l.short ?? l.name) : en,
+      });
     }
   }
 
@@ -332,7 +345,7 @@ export class Track {
     // ---- 地名看板 ----
     for (const l of this.labels) {
       if (l.idx < 30 || l.idx > n - 30) continue; // スタートゲートと重なる
-      g.add(this.gate(l.idx, makeSignTexture(l.name, 'HIROSHIMA'), 2.2, hw + 2));
+      g.add(this.gate(l.idx, makeSignTexture(l.name, l.sub), 2.2, hw + 2));
     }
     return g;
   }

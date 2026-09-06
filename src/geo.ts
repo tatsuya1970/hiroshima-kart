@@ -31,7 +31,7 @@ export const VIADUCT_HEIGHT: number = (courseJson as any).viaductHeight ?? 13;
 export interface CoursePath {
   points: [number, number][];
   elevated: number[];
-  labels: { name: string; short?: string; idx: number; label: boolean }[];
+  labels: { name: string; short?: string; en?: string; idx: number; label: boolean }[];
   length: number;
 }
 export const COURSE_PATH: CoursePath = coursePathJson as unknown as CoursePath;

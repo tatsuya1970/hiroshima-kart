@@ -48,6 +48,8 @@
     #overlay #quality button { font-size: 13px; font-weight: 600; padding: 5px 14px; border-radius: 14px; background: rgba(255,255,255,.12); color: #fff; border: 1px solid rgba(255,255,255,.25); box-shadow: none; cursor: pointer; }
     #overlay #quality button:hover { background: rgba(255,255,255,.22); }
     #overlay #quality button[aria-pressed="true"] { background: #ffd83d; color: #1b1b1b; border-color: #ffd83d; }
+    #overlay #langSwitch button { font-size: 13px; font-weight: 700; padding: 5px 14px; border-radius: 14px; background: rgba(255,255,255,.12); color: #fff; border: 1px solid rgba(255,255,255,.35); box-shadow: none; cursor: pointer; }
+    #overlay #langSwitch button:hover { background: rgba(255,255,255,.24); }
     #qualityNote { opacity: .6; font-size: 12px; }
     /* 1人PLAY と 対戦PLAY は同格。大きさも重みも揃え、色だけ変える */
     #mainButtons { display: flex; gap: 18px; align-items: center; justify-content: center; flex-wrap: wrap; }
@@ -94,7 +96,7 @@
     <div id="speed" class="box">0<small> km/h</small></div>
     <div id="landmark" class="box"></div>
     <div id="center" class="box"></div>
-    <div id="wrong" class="box">⚠ 逆走!</div>
+    <div id="wrong" class="box" data-en="⚠ WRONG WAY!">⚠ 逆走!</div>
   </div>
   <div id="touch">
     <div id="tLeft" style="left:20px">◀</div>
@@ -105,9 +107,9 @@
   </div>
   <div id="overlay">
     <h1>HIROSHIMA KART</h1>
-    <h2>広島グランプリ — PLATEAU 3D都市モデル (国土交通省) で走る広島の街</h2>
+    <h2 data-en="Hiroshima Grand Prix — race the real city, built from MLIT's PLATEAU 3D city models">広島グランプリ — PLATEAU 3D都市モデル (国土交通省) で走る広島の街</h2>
     <canvas id="titleMap" width="1120" height="640"></canvas>
-    <div class="route">広島駅 → 銀山町 → 八丁堀 → 紙屋町 → 原爆ドーム前 → 十日市 → 寺町 → エディオンピースウィング → 警察署前 → 合同庁舎東 → 白島 → 二葉の里 → 広島駅北口 → 広島駅<br /><span style="opacity:.75;font-size:13px">1周 7.31km / 走行線は PLATEAU の道路データの上を通ります。道の中央を広島電鉄が走ります（接触するとスピン）</span></div>
+    <div class="route" data-en-html='Hiroshima Sta. → Kanayama-cho → Hatchobori → Kamiya-cho → A-Bomb Dome → Tokaichi → Tera-machi → Peace Wing → Police HQ → Gov. Bldg. East → Hakushima → Futaba-no-sato → Hiroshima Sta. North → Hiroshima Sta.<br /><span style="opacity:.75;font-size:13px">7.31 km a lap. The racing line follows PLATEAU road data. Hiroden trams run down the middle of the street — touch one and you spin out.</span>'>広島駅 → 銀山町 → 八丁堀 → 紙屋町 → 原爆ドーム前 → 十日市 → 寺町 → エディオンピースウィング → 警察署前 → 合同庁舎東 → 白島 → 二葉の里 → 広島駅北口 → 広島駅<br /><span style="opacity:.75;font-size:13px">1周 7.31km / 走行線は PLATEAU の道路データの上を通ります。道の中央を広島電鉄が走ります（接触するとスピン）</span></div>
     <div id="results">
       <table id="resultTable"></table>
     </div>
@@ -118,8 +120,8 @@
     <div id="progress"><div id="progressBar"></div></div>
     <div id="online">
       <div id="onlineHome">
-        <div class="row"><label for="playerName">対戦での なまえ</label> <input id="playerName" maxlength="10" placeholder="なまえ" /></div>
-        <div id="netNote"><b>対戦PLAY</b> は押すとすぐロビーに入り、<b>30 秒で発走</b>します。集まった人どうしで、最大 8 人。空いた枠は AI が走ります。通信はブラウザ同士の直接接続です（サーバーはありません）。</div>
+        <div class="row"><label for="playerName" data-en="Your name">対戦での なまえ</label> <input id="playerName" maxlength="10" placeholder="なまえ" data-en-placeholder="name" /></div>
+        <div id="netNote" data-en-html="<b>ONLINE PLAY</b> drops you straight into a lobby that <b>starts in 30 seconds</b>. Race whoever shows up, up to 8 players. Empty seats are filled by AI. Browser-to-browser connection, no server."><b>対戦PLAY</b> は押すとすぐロビーに入り、<b>30 秒で発走</b>します。集まった人どうしで、最大 8 人。空いた枠は AI が走ります。通信はブラウザ同士の直接接続です（サーバーはありません）。</div>
         <!--
           合言葉で部屋を作る方式は、公開ロビーに切り替えたので隠してあります。
           同時に遊ぶ人が少ないうちは、待ち時間が読めるほうが遊びやすいためです。
@@ -135,7 +137,7 @@
       <div id="onlineRoom" style="display:none">
         <div class="row"><span id="countLabel">発走まで</span> <span id="countNum">30</span></div>
         <ul id="playerList"></ul>
-        <div class="row"><button id="goBtn" disabled>すぐ始める</button> <button id="leaveBtn">やめる</button></div>
+        <div class="row"><button id="goBtn" disabled data-en="Start now">すぐ始める</button> <button id="leaveBtn" data-en="Leave">やめる</button></div>
         <div id="netNote2" class="row" style="margin-top:10px;font-size:13px;opacity:.75"></div>
         <!-- 合言葉の表示 (公開ロビーでは使いません)
         <div class="row">あいことば <span id="roomCode"></span> <button id="copyBtn">リンクをコピー</button></div>
@@ -143,11 +145,12 @@
       </div>
     </div>
     <div id="quality">
-      画質 <span id="qualityBtns"></span>
-      <span id="qualityNote">環境に合わせて自動選択しています。カクつく場合は下げてください</span>
+      <span data-en="Graphics">画質</span> <span id="qualityBtns"></span>
+      <span id="qualityNote" data-en="Chosen automatically for your machine. Lower it if the frame rate drops.">環境に合わせて自動選択しています。カクつく場合は下げてください</span>
+      <span id="langSwitch"></span>
     </div>
-    <div class="keys">↑/W: アクセル　↓/S: ブレーキ・バック　←→/A D: ハンドル<br />Shift/Space: ドリフト（離してミニターボ）　Ctrl/Enter: アイテム使用　C: カメラ切替　M: 音</div>
-    <div class="credit">3D都市モデル: 国土交通省 PLATEAU「3D都市モデル（Project PLATEAU）広島市（2024年度）」を加工して作成 (<a href="https://creativecommons.org/licenses/by/4.0/deed.ja" target="_blank" rel="noopener">CC BY 4.0</a>) / 建築物 LOD2 (実写テクスチャ)・LOD1・道路・地形を使用<br />広島電鉄・JR山陽本線・山陽新幹線は実在の位置に敷設し、車両が走行します<br /><span style="opacity:.7">本作品は任天堂株式会社とは関係がありません</span></div>
+    <div class="keys" data-en-html="↑/W: accelerate　↓/S: brake and reverse　←→/A D: steer<br />Shift/Space: drift (release for a mini-turbo)　Ctrl/Enter: use item　C: camera　M: sound">↑/W: アクセル　↓/S: ブレーキ・バック　←→/A D: ハンドル<br />Shift/Space: ドリフト（離してミニターボ）　Ctrl/Enter: アイテム使用　C: カメラ切替　M: 音</div>
+    <div class="credit" data-en-html='3D city model: MLIT Project PLATEAU, "3D City Model (Project PLATEAU) Hiroshima City (FY2024)", adapted (<a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noopener">CC BY 4.0</a>) — buildings LOD2 (aerial-photo textures) and LOD1, roads, terrain<br />Hiroden trams, the JR Sanyo Line and the Sanyo Shinkansen run on their real alignments<br /><span style="opacity:.7">Not affiliated with Nintendo</span>'>3D都市モデル: 国土交通省 PLATEAU「3D都市モデル（Project PLATEAU）広島市（2024年度）」を加工して作成 (<a href="https://creativecommons.org/licenses/by/4.0/deed.ja" target="_blank" rel="noopener">CC BY 4.0</a>) / 建築物 LOD2 (実写テクスチャ)・LOD1・道路・地形を使用<br />広島電鉄・JR山陽本線・山陽新幹線は実在の位置に敷設し、車両が走行します<br /><span style="opacity:.7">本作品は任天堂株式会社とは関係がありません</span></div>
   </div>
   <script type="module" src="/src/main.ts"></script>
 </body>

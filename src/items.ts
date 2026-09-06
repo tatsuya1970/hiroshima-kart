@@ -3,6 +3,7 @@ import * as THREE from 'three';
 import type { Track } from './track';
 import { Kart, type ItemType } from './kart';
 import { makeItemBoxTexture, makeCoinTexture } from './textures';
+import { t } from './i18n';
 
 interface Box { idx: number; lateral: number; mesh: THREE.Mesh; respawn: number; }
 interface Coin { idx: number; lateral: number; mesh: THREE.Mesh; taken: number; }
@@ -217,4 +218,4 @@ export class ItemSystem {
 }
 
 export const ITEM_ICON: Record<ItemType, string> = { mushroom: '🍄', banana: '🍌', shell: '🐢', star: '⭐' };
-export const ITEM_NAME: Record<ItemType, string> = { mushroom: 'キノコ', banana: 'バナナ', shell: 'ミドリこうら', star: 'スター' };
+export const ITEM_NAME: Record<ItemType, string> = { mushroom: t('item.mushroom'), banana: t('item.banana'), shell: t('item.shell'), star: t('item.star') };
