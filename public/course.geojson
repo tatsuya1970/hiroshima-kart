@@ -8785,6 +8785,20 @@
   {
    "type": "Feature",
    "properties": {
+    "name": "エディオンピースウィング",
+    "marker-color": "#1d3557"
+   },
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     132.453671,
+     34.40054
+    ]
+   }
+  },
+  {
+   "type": "Feature",
+   "properties": {
     "name": "警察署前",
     "marker-color": "#1d3557"
    },

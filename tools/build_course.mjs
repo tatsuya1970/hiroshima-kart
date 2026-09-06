@@ -414,7 +414,7 @@ writeFileSync('data/course_path.json', JSON.stringify({
   points: path.map(p => [Math.round(p[0] * 10) / 10, Math.round(p[1] * 10) / 10]),
   elevated: path.map(p => Math.round(p[2] * 100) / 100),
   stationCarve: sp?.carve ?? null,
-  labels: labelWps.map((w, i) => ({ name: w.name, idx: idxOfWaypoint[i], label: !!w.label })),
+  labels: labelWps.map((w, i) => ({ name: w.name, short: w.short ?? w.name, idx: idxOfWaypoint[i], label: !!w.label })),
 }));
 console.log('data/course_path.json を書き出しました');
 

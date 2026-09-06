@@ -23,7 +23,8 @@ export class Track {
   elev!: Float32Array; // 高架のかさ上げ量 (m)。0 なら地上
   length = 0;
   halfWidth = ROAD_WIDTH / 2;
-  labels: { idx: number; name: string }[] = [];
+  /** name = コース上の看板、short = 地図に描く短い名前 */
+  labels: { idx: number; name: string; short: string }[] = [];
   private hash = new Map<number, number[]>();
   private readonly HCELL = 30;
 
@@ -148,7 +149,7 @@ export class Track {
     }
     // ラベル (経路上の位置は build_course.mjs が算出済み)
     for (const l of COURSE_PATH.labels) {
-      if (l.label) this.labels.push({ idx: this.wrap(l.idx), name: l.name });
+      if (l.label) this.labels.push({ idx: this.wrap(l.idx), name: l.name, short: l.short ?? l.name });
     }
   }
 

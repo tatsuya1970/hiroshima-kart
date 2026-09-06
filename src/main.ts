@@ -56,6 +56,8 @@ function setupQualityButtons(current: QualityLevel): void {
 async function main() {
   const canvas = document.getElementById('game') as HTMLCanvasElement;
   const startBtn = document.getElementById('startBtn') as HTMLButtonElement;
+  const openBtn = document.getElementById('openBtn') as HTMLButtonElement;
+  const mainButtons = document.getElementById('mainButtons')!;
   const overlay = document.getElementById('overlay')!;
   const progressBar = document.getElementById('progressBar')!;
   const results = document.getElementById('results')!;
@@ -250,6 +252,8 @@ async function main() {
     titleMap.style.display = 'none';   // リザルトではコース図を隠す
     document.getElementById('online')!.style.display = 'none';
     overlay.style.display = 'flex';
+    mainButtons.style.display = '';
+    openBtn.style.display = 'none';   // リザルトでは「もう一度走る」だけ出す
     startBtn.style.display = '';
     startBtn.textContent = 'もう一度走る';
     startBtn.disabled = false;
@@ -258,7 +262,8 @@ async function main() {
   const fmt = (t: number) => { const m = Math.floor(t / 60); return `${m}:${(t - m * 60).toFixed(2).padStart(5, '0')}`; };
 
   startBtn.disabled = false;
-  startBtn.textContent = 'スタート!';
+  openBtn.disabled = false;
+  startBtn.textContent = '1人PLAY';
   startBtn.onclick = () => {
     overlay.style.display = 'none';
     audio.start();
@@ -423,7 +428,7 @@ async function main() {
     }
     onlineHome.style.display = 'none';
     onlineRoom.style.display = 'block';
-    startBtn.style.display = 'none';
+    mainButtons.style.display = 'none';
     // 合言葉の部屋にはカウントダウンが無いので、表示を出しっぱなしにしない
     countLabel.style.display = deadline ? '' : 'none';
     countNum.style.display = deadline ? '' : 'none';

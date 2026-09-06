@@ -163,7 +163,8 @@ export function makeSignTexture(text: string, sub = ''): THREE.Texture {
   ctx.fillStyle = '#fff';
   ctx.font = 'bold 96px "Hiragino Sans","Noto Sans JP","Segoe UI",sans-serif';
   ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-  ctx.fillText(text, 512, sub ? 78 : 96);
+  // 長い地名 (エディオンピースウィング など) は縮めて収める
+  ctx.fillText(text, 512, sub ? 78 : 96, 940);
   if (sub) { ctx.font = '40px sans-serif'; ctx.fillStyle = '#ffd83d'; ctx.fillText(sub, 512, 148); }
   const t = toTexture(c, false);
   return t;

@@ -49,8 +49,14 @@
     #overlay #quality button:hover { background: rgba(255,255,255,.22); }
     #overlay #quality button[aria-pressed="true"] { background: #ffd83d; color: #1b1b1b; border-color: #ffd83d; }
     #qualityNote { opacity: .6; font-size: 12px; }
+    /* 1人PLAY と 対戦PLAY は同格。大きさも重みも揃え、色だけ変える */
+    #mainButtons { display: flex; gap: 18px; align-items: center; justify-content: center; flex-wrap: wrap; }
+    #overlay #mainButtons button { min-width: 260px; }
+    #overlay #openBtn { background: linear-gradient(#4aa3ff, #1152b8); box-shadow: 0 6px 0 #0b3576, 0 12px 24px rgba(0,0,0,.5); }
+
     /* ---- オンライン対戦 ---- */
     #online { margin-top: 18px; font-size: 15px; width: min(560px, 90vw); }
+    #online label { opacity: .8; }
     #online .row { display: flex; gap: 8px; align-items: center; justify-content: center; flex-wrap: wrap; }
     #online input { font-size: 17px; padding: 9px 14px; border-radius: 10px; border: 1px solid rgba(255,255,255,.3); background: rgba(255,255,255,.1); color: #fff; width: 150px; text-align: center; }
     #online input::placeholder { color: rgba(255,255,255,.45); }
@@ -101,19 +107,19 @@
     <h1>HIROSHIMA KART</h1>
     <h2>広島グランプリ — PLATEAU 3D都市モデル (国土交通省) で走る広島の街</h2>
     <canvas id="titleMap" width="1120" height="640"></canvas>
-    <div class="route">広島駅 → 銀山町 → 八丁堀 → 紙屋町 → 原爆ドーム前 → 十日市 → 寺町 → 警察署前 → 合同庁舎東 → 白島 → 二葉の里 → 広島駅北口 → 広島駅<br /><span style="opacity:.75;font-size:13px">1周 7.31km / 走行線は PLATEAU の道路データの上を通ります。道の中央を広島電鉄が走ります（接触するとスピン）</span></div>
+    <div class="route">広島駅 → 銀山町 → 八丁堀 → 紙屋町 → 原爆ドーム前 → 十日市 → 寺町 → エディオンピースウィング → 警察署前 → 合同庁舎東 → 白島 → 二葉の里 → 広島駅北口 → 広島駅<br /><span style="opacity:.75;font-size:13px">1周 7.31km / 走行線は PLATEAU の道路データの上を通ります。道の中央を広島電鉄が走ります（接触するとスピン）</span></div>
     <div id="results">
       <table id="resultTable"></table>
     </div>
-    <button id="startBtn" disabled>読み込み中...</button>
+    <div id="mainButtons">
+      <button id="startBtn" disabled>読み込み中...</button>
+      <button id="openBtn" disabled>対戦PLAY</button>
+    </div>
     <div id="progress"><div id="progressBar"></div></div>
     <div id="online">
       <div id="onlineHome">
-        <div class="row">
-          <input id="playerName" maxlength="10" placeholder="なまえ" />
-          <button id="openBtn">みんなで走る</button>
-        </div>
-        <div id="netNote">押すとすぐロビーに入り、<b>30 秒で発走</b>します。集まった人どうしで、最大 8 人。空いた枠は AI が走ります。通信はブラウザ同士の直接接続です（サーバーはありません）。</div>
+        <div class="row"><label for="playerName">対戦での なまえ</label> <input id="playerName" maxlength="10" placeholder="なまえ" /></div>
+        <div id="netNote"><b>対戦PLAY</b> は押すとすぐロビーに入り、<b>30 秒で発走</b>します。集まった人どうしで、最大 8 人。空いた枠は AI が走ります。通信はブラウザ同士の直接接続です（サーバーはありません）。</div>
         <!--
           合言葉で部屋を作る方式は、公開ロビーに切り替えたので隠してあります。
           同時に遊ぶ人が少ないうちは、待ち時間が読めるほうが遊びやすいためです。

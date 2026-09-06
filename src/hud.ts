@@ -77,9 +77,9 @@ export function drawCourseMap(canvas: HTMLCanvasElement, track: Track) {
     const x0 = align === 'left' ? tx : align === 'right' ? tx - tw : tx - tw / 2;
     tx += Math.max(0, 3 - x0) - Math.max(0, x0 + tw - (W - 3));
     c.lineWidth = 3; c.strokeStyle = 'rgba(0,0,0,.75)';
-    c.strokeText(l.name, tx, ty);
+    c.strokeText(l.short, tx, ty);
     c.fillStyle = '#ffd83d';
-    c.fillText(l.name, tx, ty);
+    c.fillText(l.short, tx, ty);
   }
 
   // スタート地点
@@ -124,7 +124,7 @@ export class Hud {
   showLandmark(name: string) { this.landmark.textContent = name; this.landmark.style.opacity = '1'; this.landmarkTimer = 2.2; }
   showCenter(text: string, dur = 1, color = '#ffd83d') { this.center.textContent = text; this.center.style.color = color; this.center.style.opacity = '1'; this.centerTimer = dur; }
 
-  update(dt: number, player: Kart, karts: Kart[], raceTime: number, track: Track, labels: { idx: number; name: string }[]) {
+  update(dt: number, player: Kart, karts: Kart[], raceTime: number, track: Track, labels: { idx: number; name: string; short: string }[]) {
     this.lapNum.textContent = String(Math.max(1, Math.min(player.lap, Number(this.lapTotal.textContent))));
     const t = Math.max(0, raceTime);
     const m = Math.floor(t / 60), s = t - m * 60;
@@ -149,7 +149,7 @@ export class Hud {
     this.mapPts.forEach((p, i) => (i ? c.lineTo(p[0], p[1]) : c.moveTo(p[0], p[1])));
     c.closePath(); c.stroke();
     c.fillStyle = '#ffd83d'; c.font = '9px sans-serif'; c.textAlign = 'center';
-    for (const l of labels) { const p = this.toMap(track.px[l.idx], track.pz[l.idx]); c.fillText(l.name, p[0], p[1] - 6); }
+    for (const l of labels) { const p = this.toMap(track.px[l.idx], track.pz[l.idx]); c.fillText(l.short, p[0], p[1] - 6); }
     for (const k of karts) {
       const p = this.toMap(k.x, k.z);
       c.beginPath(); c.arc(p[0], p[1], k.def.isPlayer ? 6 : 4, 0, Math.PI * 2);
