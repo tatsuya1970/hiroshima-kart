@@ -70,6 +70,26 @@ PLATEAU の LOD2 は 1 棟につき 1 枚のテクスチャ画像（512〜2048px
 
 ランドマークと重なる PLATEAU 建物は `excludeRadius` で除きます。`tools/convert_citygml.mjs` はデータ生成時に、`src/landmarks.ts` の `landmarkBlocksBuilding` は実行時に同じ判定をします（生成済みの `public/data/` を作り直さずにランドマークを追加できるようにするため）。
 
+## 公園の緑地と広島城の内堀
+
+**平和記念公園**（本川と元安川に挟まれた中州）、**原爆ドーム周辺**、**広島城**、**中央公園**を芝生と樹木で再現しています。**広島城の内堀**は水面・石垣つきです（`src/parks.ts` と `data/parks.json`）。
+
+PLATEAU にはどちらの地物もありません。建築物・道路・地形には公園も濠も含まれず、土地利用モデル `luse` は 250m メッシュを塗っただけなので輪郭に使えません（平和記念公園の一帯は 6.63ha の正方形 4 枚で覆われるだけでした）。そのため輪郭は手で置き、DEM と突き合わせて位置を決めています。
+
+| 突き合わせた内容 | 結果 |
+| --- | --- |
+| 平和記念公園の東西の幅 | 緯度ごとに DEM を東西スキャンして中州の水際を測り、輪郭をそこに合わせた |
+| 広島城の城内 | 天守から連結する標高 5.5m 以上の高台（180 × 195m）を包む大きさに内堀の内側を決めた |
+| 内堀の位置 | DEM に窪みとして残るのは北と西だけ（2.0〜2.5m。周囲は 3.0〜3.9m）で、南と東は周囲と同じ高さに潰れているため、全周を掘り直している |
+
+処理は 3 段です。
+
+1. **整地**（`carve`）— 内堀の帯を掘り下げ、城内は水面より低くならないよう持ち上げ、公園内で誤って水面と判定されている低地は周囲の陸地の中央値で埋めます。走行線から 16m 以内は触りません（道路が沈んだり水没したりしないように）。走行線の標高にも効かせるため `Track` を作る前に実行します。
+2. **地面テクスチャ**（`draw`）— 芝と堀底を描きます。道路とコース帯はこの上に描かれるので、公園を横切る道路は隠れません。
+3. **メッシュ**（`build`）— 内堀の水面と内外の石垣、樹木を作ります。樹木は決定的な乱数で撒き、水面・走行線・建物の上は避けます（現在 674 本、幹と樹冠 2 種の `InstancedMesh` 3 つ）。
+
+中央公園の一帯が河川と誤判定される問題（ピースウィングの項）も、この整地で一緒に埋まります。
+
 ## セットアップ
 
 ```bash
@@ -156,7 +176,9 @@ http://localhost:5180/?debug=1&ai=1&steps=60   # プレイヤーも AI 操作 + 
 http://localhost:5180/?debug=1&photo=34.39564,132.45362,14,75,200  # 指定した緯度経度を撮影
 ```
 
-`norail=1` `nolod2=1` `nobldg=1` `nodome=1` `noshadow=1` `lod2basic=1` で要素を切り分けられます。
+`norail=1` `nolod2=1` `nobldg=1` `nodome=1` `nopark=1` `noshadow=1` `lod2basic=1` で要素を切り分けられます。
+
+ポート 5180 が別プロジェクトに使われている場合は `npx vite --port 5181 --strictPort` で起動し、`PORT=5181 node tools/shots.mjs ...` のように `PORT` を渡します（`shots.mjs` と `airace.mjs` が対応しています）。
 
 画面左上（タイマーの下）に FPS を常時表示します。50 以上で緑、30 以上で黄、それ未満は赤。`nofps=1` で非表示にできます。
 
@@ -170,6 +192,7 @@ http://localhost:5180/?debug=1&photo=34.39564,132.45362,14,75,200  # 指定し�
 data/course.json           コースの制御点 (緯度経度・高架フラグ)
 data/course_path.json      道路上を通る走行線 (build_course.mjs が生成)
 data/rail.json             鉄道・軌道・ランドマークの実在位置
+data/parks.json            公園の輪郭と広島城の内堀
 tools/download_plateau.mjs PLATEAU CityGML ダウンロード
 tools/convert_citygml.mjs  CityGML → buildings.json / roads.json / terrain.bin (LOD1)
 tools/convert_lod2.mjs     CityGML → lod2.bin / lod2.json (LOD2 実写テクスチャ)
@@ -193,6 +216,7 @@ src/lod2.ts       LOD2 実写テクスチャ建物の読み込み
 src/quality.ts    画質プリセット (GPU 自動判定・localStorage 保存)
 src/rail.ts       広電・JR・新幹線の線路と走行車両
 src/landmarks.ts  原爆ドーム・広島城・エディオンピースウィング
+src/parks.ts      公園の芝・樹木と広島城の内堀 (地形の整地込み)
 src/kart.ts       カート物理・モデル・AI
 src/items.ts      アイテムボックス・コイン・バナナ・甲羅
 src/hud.ts        HUD・ミニマップ

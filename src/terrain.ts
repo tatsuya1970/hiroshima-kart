@@ -2,6 +2,9 @@
 import * as THREE from 'three';
 import { assetUrl } from './geo';
 
+/** 地面テクスチャへの描き込み (ワールド m → px の倍率 sx, sz を受け取る) */
+export type GroundPaint = (ctx: CanvasRenderingContext2D, sx: number, sz: number) => void;
+
 export interface TerrainMeta {
   w: number;
   h: number;
@@ -76,7 +79,7 @@ export class Terrain {
   }
 
   /** 地形メッシュを生成。roads は地面テクスチャに描画する道路ポリゴン */
-  build(roads: number[][], trackMask: (ctx: CanvasRenderingContext2D, sx: number, sz: number) => void): THREE.Group {
+  build(roads: number[][], trackMask: GroundPaint, parkMask?: GroundPaint): THREE.Group {
     const { w, h, cell, x0, z0, water, scale } = this.meta;
     const group = new THREE.Group();
 
@@ -96,6 +99,8 @@ export class Terrain {
       ctx.fillStyle = `rgba(${150 + Math.random() * 60 | 0},${150 + Math.random() * 50 | 0},${130 + Math.random() * 40 | 0},0.25)`;
       ctx.beginPath(); ctx.arc(px, py, r, 0, Math.PI * 2); ctx.fill();
     }
+    // 公園の芝・濠 (道路より先。交差する所は道路が上に来る)
+    parkMask?.(ctx, sx, sz);
     // 道路 (PLATEAU tran)
     ctx.fillStyle = '#5c5d61';
     ctx.strokeStyle = '#8b8c90';

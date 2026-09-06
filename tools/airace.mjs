@@ -8,7 +8,7 @@ const page = await browser.newPage({ viewport: { width: 640, height: 360 } });
 const logs = [];
 page.on('console', m => { if (m.type() !== 'debug') logs.push(`[${m.type()}] ${m.text()}`); });
 page.on('pageerror', e => logs.push(`[pageerror] ${e.message}`));
-await page.goto(`http://localhost:5180/?debug=1&ai=1&steps=${steps}&cam=1`, { waitUntil: 'load' });
+await page.goto(`http://localhost:${process.env.PORT ?? 5180}/?debug=1&ai=1&steps=${steps}&cam=1`, { waitUntil: 'load' });
 await page.waitForFunction(() => (window).__debug, null, { timeout: 180000 });
 const t0 = Date.now();
 while (Date.now() - t0 < secs * 1000) {

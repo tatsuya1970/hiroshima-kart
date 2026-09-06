@@ -9,6 +9,7 @@ import { Hud, drawCourseMap } from './hud';
 import { InputManager } from './input';
 import { AudioSystem } from './audio';
 import { buildRail, type RailSystem } from './rail';
+import { Parks } from './parks';
 import { buildGenbakuDome, buildHiroshimaCastle, buildPeaceWing, landmarkBlocksBuilding } from './landmarks';
 import { loadLod2 } from './lod2';
 import { rng, lerp, clamp, assetUrl, WAYPOINTS, llToXZ } from './geo';
@@ -110,12 +111,22 @@ async function main() {
     (await fetch(assetUrl('data/buildings.json'))).json() as Promise<BuildingsData>,
     (await fetch(assetUrl('data/roads.json'))).json() as Promise<{ items: number[][] }>,
   ]);
+  setProgress(0.38, '公園・濠を整地中...');
+  await nextFrame();
+  // 濠を掘り、公園内の誤った水面を埋める。走行線の標高にも効かせるため Track より先。
+  const parks = new Parks(terrain);
+  parks.carve();
   setProgress(0.4, 'コース生成中...');
   await nextFrame();
   const track = new Track(terrain);
   setProgress(0.44, '地形生成中...');
   await nextFrame();
-  scene.add(terrain.build(rData.items, (ctx, sx, sz) => track.drawMask(ctx, sx, sz, terrain.xMin, terrain.zMin)));
+  // 芝・濠 → 道路 → コース帯 の順に重ねる
+  scene.add(terrain.build(
+    rData.items,
+    (ctx, sx, sz) => track.drawMask(ctx, sx, sz, terrain.xMin, terrain.zMin),
+    (ctx, sx, sz) => parks.draw(ctx, sx, sz, terrain.xMin, terrain.zMin),
+  ));
   scene.add(makeHills(terrain));
   // デバッグ用トグル: ?norail=1 / ?nolod2=1 / ?nodome=1 / ?nobldg=1
   const params = new URLSearchParams(location.search);
@@ -126,7 +137,7 @@ async function main() {
   setProgress(0.56, `建物 ${bData.count} 棟を生成中...`);
   await nextFrame();
   let stat = '';
-  const bldgGroup = buildBuildings(bData, track, terrain, s => (stat = s), ring => rail.blocksBuilding(ring) || landmarkBlocksBuilding(ring));
+  const bldgGroup = buildBuildings(bData, track, terrain, s => (stat = s), ring => rail.blocksBuilding(ring) || landmarkBlocksBuilding(ring) || parks.blocksBuilding(ring));
   if (!params.get('nobldg')) scene.add(bldgGroup);
   setProgress(0.68, stat);
   await nextFrame();
@@ -147,6 +158,7 @@ async function main() {
     scene.add(buildHiroshimaCastle(terrain));
     scene.add(buildPeaceWing(terrain));
   }
+  if (!params.get('nopark')) scene.add(parks.build(bData, track));
   scene.add(track.buildMesh());
 
   // ---- カート / アイテム ----

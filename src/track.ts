@@ -64,17 +64,26 @@ export class Track {
     const b2 = new Uint8Array(this.bridge);
     for (let i = 0; i < n; i++) if (this.bridge[i]) for (let d = -6; d <= 6; d++) b2[(i + d + n) % n] = 1;
     this.bridge = b2;
-    // NaN 補間 (円環)
+    // NaN 補間 (円環)。探索は補間前のコピー (src) に対して行う。補間済みの raw を
+    // 見ると、直前に持ち上げた値を岸の高さとして再利用して桁が積み上がり、
+    // 橋の途中で 10m 以上せり上がってしまう。
+    // 岸の高さは水際 (DEM は護岸の斜面で低い) ではなく、その手前 24m の最高点
+    // (堤防上の道路面) を使う。
+    const src = Float32Array.from(raw);
+    const bankLevel = (k: number, step: number) => {
+      let m = -Infinity;
+      for (let d = 0; d < 12; d++) { const v = src[(k + step * d + n) % n]; if (!Number.isNaN(v) && v > m) m = v; }
+      return m === -Infinity ? 3 : m;
+    };
     for (let i = 0; i < n; i++) {
-      if (!Number.isNaN(raw[i])) continue;
+      if (!Number.isNaN(src[i])) continue;
       let a = i, b = i, la = 0, lb = 0;
-      while (Number.isNaN(raw[a]) && la < n) { a = (a - 1 + n) % n; la++; }
-      while (Number.isNaN(raw[b]) && lb < n) { b = (b + 1) % n; lb++; }
-      const ha = Number.isNaN(raw[a]) ? 3 : raw[a], hb = Number.isNaN(raw[b]) ? 3 : raw[b];
-      const hmax = Math.max(ha, hb);
+      while (Number.isNaN(src[a]) && la < n) { a = (a - 1 + n) % n; la++; }
+      while (Number.isNaN(src[b]) && lb < n) { b = (b + 1) % n; lb++; }
+      const hmax = Math.max(bankLevel(a, -1), bankLevel(b, 1));
       // 橋はアーチ状に少し持ち上げる
       const t = la / (la + lb);
-      raw[i] = hmax + Math.sin(t * Math.PI) * 1.5;
+      raw[i] = hmax + Math.sin(t * Math.PI) * 0.8;
     }
     // 移動平均 2 回 (窓 ±20 サンプル = 40m)
     let cur = raw;
@@ -92,9 +101,17 @@ export class Track {
     // 盛り上がりがあると移動平均で削れ、地形が路面を突き抜けて見える (駅前大橋など)。
     // 地面より下にはならないよう下限を掛け、できた段差は短い窓で慣らす。
     // 慣らすとまた下回るので何度か繰り返し、最後にもう一度下限を掛ける。
+    // 下限で急な山ができた所 (護岸・堤防) は、前後を持ち上げて勾配を 5% 以下に抑える。
     const floor = (v: Float32Array) => { for (let i = 0; i < n; i++) if (v[i] < raw[i] + 0.05) v[i] = raw[i] + 0.05; };
+    const limitSlope = (v: Float32Array, maxStep: number) => {
+      for (let pass = 0; pass < 2; pass++) {
+        for (let i = 1; i <= n; i++) { const k = i % n, p = i - 1; if (v[k] < v[p] - maxStep) v[k] = v[p] - maxStep; }
+        for (let i = n - 2; i >= -1; i--) { const k = (i + n) % n, q = (i + 1 + n) % n; if (v[k] < v[q] - maxStep) v[k] = v[q] - maxStep; }
+      }
+    };
+    const MAX_STEP = 0.05 * STEP;
     for (let pass = 0; pass < 3; pass++) {
-      floor(cur);
+      floor(cur); limitSlope(cur, MAX_STEP);
       const out = new Float32Array(n);
       const R = 6;
       for (let i = 0; i < n; i++) {
@@ -104,7 +121,7 @@ export class Track {
       }
       cur = out;
     }
-    floor(cur);
+    floor(cur); limitSlope(cur, MAX_STEP);
     // 高架区間 (実在しない新設道路) のかさ上げ量。経路の印を平滑化してスロープにする
     this.elev = new Float32Array(n);
     {
