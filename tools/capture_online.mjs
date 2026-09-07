@@ -14,6 +14,7 @@ import path from 'node:path';
 const OUT = process.env.OUT ?? 'data/shots/capture';
 const RACE_SECONDS = Number(process.env.RACE_SECONDS ?? 90);
 const BASE = `http://localhost:${process.env.PORT ?? 5180}/`;
+const LANG = process.env.LANG_UI ?? 'ja';
 mkdirSync(OUT, { recursive: true });
 
 const browser = await chromium.launch({
@@ -27,7 +28,7 @@ async function open(label, name) {
   });
   const page = await ctx.newPage();
   page.on('pageerror', e => console.log(`[${label} pageerror] ${e.message}`));
-  await page.goto(BASE + '?ai=1&nofps=1&q=high', { waitUntil: 'load' });
+  await page.goto(BASE + `?ai=1&nofps=1&q=high&lang=${LANG}`, { waitUntil: 'load' });
   await page.waitForFunction(() => {
     const b = document.getElementById('startBtn');
     return b && !b.disabled;
@@ -39,7 +40,7 @@ async function open(label, name) {
 }
 
 // 2 つ同時に読み込む (順番に開くと押す時刻がずれて別の部屋になる)
-const [A, B] = await Promise.all([open('host', 'ヒロシマ'), open('guest', 'カープ')]);
+const [A, B] = await Promise.all([open('host', LANG === 'ja' ? 'ヒロシマ' : 'Hiroshima'), open('guest', LANG === 'ja' ? 'カープ' : 'Carp')]);
 
 const marks = {};
 // タイトル画面を見せる時間
