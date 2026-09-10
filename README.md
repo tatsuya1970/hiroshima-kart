@@ -190,6 +190,23 @@ BASE_PATH=/hiroshima-kart/ npm run preview   # http://127.0.0.1:4173/hiroshima-k
 
 アイテム: キノコ（加速）、バナナ（後方に設置）、ミドリこうら（前方に発射・壁で反射）、スター（無敵）。コインを取ると最高速が少し上がります。
 
+### スマホ / タブレット
+
+タッチ操作に対応しています。**横向き推奨**ですが、縦向きでも遊べます（Facebook などアプリ内ブラウザは縦に固定されていることがあるため）。
+
+| ボタン | 操作 |
+| --- | --- |
+| ◀ ▶（左下） | ハンドル |
+| D（右下） | ドリフト（離すとミニターボ） |
+| ▼ | ブレーキ・バック |
+| ★ | アイテム使用 |
+
+**アクセルは自動です。** 親指 2 本でハンドル・ドリフト・アイテムを賄うので、アクセルを押しっぱなしにする指がありません。ブレーキを押している間だけアクセルが離れます。
+
+タッチは各ボタンではなく画面全面（`#touch`）で受け、指ごとに座標からボタンを引き直します（`src/input.ts`）。ボタンに `touchstart` を付ける方式だと、◀ に置いた指を ▶ へ滑らせても ◀ が押されたままになるためです。
+
+Android の Chrome では PLAY を押すと全画面にして横向きに固定します。iPhone は全画面 API も向きの固定も無いので、縦向きのときはタイトル画面に「横向きにすると見やすくなります」と出すだけです。HUD とボタンはノッチ・ホームバーを避けて置きます（`viewport-fit=cover` と `env(safe-area-inset-*)`）。ミニマップはスマホでは出しません。
+
 ## 画質プリセット
 
 公開環境では GPU を選べないため、タイトル画面に画質切り替えを置いています。初回は WebGL の `WEBGL_debug_renderer_info` から GPU 名を読んで自動選択し、以後は localStorage に保存します（`src/quality.ts`）。アトラスの解像度が変わるので、切り替えはページ再読み込みで反映されます。
@@ -259,6 +276,7 @@ tools/build_lod2_atlas_lq.mjs 低画質用 2048px アトラス生成 (既存ア�
 tools/build_course.mjs     走行線を PLATEAU の道路面の上に載せる (A* 探索)
 tools/export_course_geo.mjs コースを GeoJSON / KML / GPX / OSM 地図ページへ書き出す
 tools/screenshot.mjs       Playwright による動作確認スクリーンショット
+tools/mobile_check.mjs     スマホ表示 (横持ち / 縦持ち) とタッチ操作の確認
 tools/shots.mjs            任意地点のスクリーンショット
 tools/airace.mjs           全 AI による高速レース検証
 tools/nettest.mjs          オンライン対戦の疎通確認 (ブラウザ 2 つ)

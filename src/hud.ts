@@ -102,6 +102,8 @@ export class Hud {
   private wrong = $('wrong');
   private mm = $('minimap') as HTMLCanvasElement;
   private mctx = this.mm.getContext('2d')!;
+  /** スマホでは CSS (pointer: coarse) でミニマップを隠しているので、描画も省く */
+  private mmHidden = getComputedStyle(this.mm).display === 'none';
   private mapPts: [number, number][] = [];
   private mapScale = 1; private mapOx = 0; private mapOz = 0;
   private landmarkTimer = 0;
@@ -142,6 +144,7 @@ export class Hud {
     if (this.centerTimer > 0) { this.centerTimer -= dt; if (this.centerTimer <= 0) this.center.style.opacity = '0'; }
     this.wrong.style.display = player.wrongWayTime > 1.2 ? 'block' : 'none';
     // ミニマップ
+    if (this.mmHidden) return;
     const c = this.mctx;
     c.clearRect(0, 0, this.mm.width, this.mm.height);
     c.lineWidth = 5; c.strokeStyle = 'rgba(255,255,255,0.85)'; c.lineJoin = 'round';

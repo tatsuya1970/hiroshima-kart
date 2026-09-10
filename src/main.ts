@@ -68,6 +68,19 @@ function setupLangButton(): void {
   host.appendChild(b);
 }
 
+/**
+ * スマホでは全画面にして横向きに固定する (Android の Chrome)。iPhone は全画面 API も
+ * 向きの固定も無いので何も起きず、縦のときは CSS の #rotateHint で横向きを勧める。
+ * どちらもユーザー操作の中でしか呼べないので PLAY ボタンの click から呼ぶ。
+ */
+function goLandscape(): void {
+  if (!matchMedia('(pointer: coarse)').matches) return;
+  const el = document.documentElement;
+  const orientation = screen.orientation as ScreenOrientation & { lock?: (o: string) => Promise<void> };
+  const fs = el.requestFullscreen ? el.requestFullscreen({ navigationUI: 'hide' }) : Promise.resolve();
+  fs.then(() => orientation.lock?.('landscape')).catch(() => { /* 対応していない環境ではそのまま */ });
+}
+
 async function main() {
   applyDomLang();
   const canvas = document.getElementById('game') as HTMLCanvasElement;
@@ -99,7 +112,10 @@ async function main() {
   scene.background = skyColor;
   scene.fog = new THREE.Fog(0xbfdcf0, 400, quality.drawDistance);
   const camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.5, quality.drawDistance * 1.45);
-  window.addEventListener('resize', () => { renderer.setSize(window.innerWidth, window.innerHeight); camera.aspect = window.innerWidth / window.innerHeight; camera.updateProjectionMatrix(); });
+  const fit = () => { renderer.setSize(window.innerWidth, window.innerHeight); camera.aspect = window.innerWidth / window.innerHeight; camera.updateProjectionMatrix(); };
+  window.addEventListener('resize', fit);
+  // iOS は回転直後の resize で回転前の寸法を返すことがあるので、少し待ってもう一度合わせる
+  window.addEventListener('orientationchange', () => setTimeout(fit, 300));
 
   const hemi = new THREE.HemisphereLight(0xcfe8ff, 0x8a7f6a, 0.9);
   scene.add(hemi);
@@ -283,6 +299,7 @@ async function main() {
   startBtn.textContent = t('btn.solo');
   openBtn.textContent = t('btn.online');
   startBtn.onclick = () => {
+    goLandscape();
     overlay.style.display = 'none';
     audio.start();
     state = 'countdown'; countdown = 3.999;
@@ -466,6 +483,7 @@ async function main() {
 
   // 公開ロビー: 押すとすぐ入り、時計で決まる締切に発走する
   byId<HTMLButtonElement>('openBtn').onclick = () => {
+    goLandscape();
     const room = openRoom();
     deadline = room.deadline;
     connect(room.code, 'open');

@@ -51,7 +51,7 @@ function isLevel(v: unknown): v is QualityLevel {
  * 誤判定しても手動で変えられるので、迷ったら軽い側に倒す。
  */
 export function detectLevel(): QualityLevel {
-  // モバイルは VRAM も帯域も厳しく、そもそもタッチ操作が未対応
+  // モバイルは VRAM も帯域も厳しい
   const mobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
   if (mobile) return 'low';
 
