@@ -5,7 +5,7 @@ import { Track } from './track';
 import { buildBuildings, type BuildingsData } from './buildings';
 import { Kart, type RacerDef, type ItemType } from './kart';
 import { ItemSystem } from './items';
-import { NetSession, Presence, newOpenCode, normalizeRoomCode, COUNTDOWN_SEC, type LobbyInfo, type NetEvent, type Pose, type RoomKind } from './net';
+import { NetSession, Presence, newOpenCode, normalizeRoomCode, relayStatus, COUNTDOWN_SEC, type LobbyInfo, type NetEvent, type Pose, type RoomKind } from './net';
 import { Hud, drawCourseMap } from './hud';
 import { InputManager } from './input';
 import { AudioSystem } from './audio';
@@ -99,6 +99,10 @@ async function main() {
   console.log(`画質: ${quality.level} (アトラス ${quality.halfAtlas ? '2048' : '4096'}px / 影 ${quality.shadows ? 'on' : 'off'})`);
   setupQualityButtons(quality.level);
   setupLangButton();
+  // ビルドの識別。古いページがキャッシュに残っていると新しい側の「対戦待ち」を読めないので、
+  // どの版が動いているかを隅に出しておく (vite.config.ts の define)
+  const buildInfo = document.getElementById('buildInfo');
+  if (buildInfo) buildInfo.textContent = `build ${__BUILD__.commit} (${new Date(__BUILD__.time).toLocaleString()})`;
   // トップ画面の「対戦待ち」表示。相手とつながるまで 8〜19 秒かかるので、
   // 読み込みの裏で先に探し始める (?debug=1 はロビーを通らないので入らない)
   let presence: Presence | null = null;
@@ -455,8 +459,14 @@ async function main() {
   const presenceMain = byId<HTMLSpanElement>('presenceMain');
   const presenceSub = byId<HTMLDivElement>('presenceSub');
   const presence2 = byId<HTMLDivElement>('presence2');
-  /** 誰ともつながっていない間は「確認中」。これを過ぎたら「いません」と言い切る */
-  const PRESENCE_CHECK_MS = 25000;
+  /**
+   * 誰ともつながっていない間は「確認中」。これを過ぎたら「見当たりません」にする。
+   * 相手が先にいても、見つかるまで 1 分近くかかることがある: trystero の nostr 戦略は
+   * 自分の告知を受け取った相手が接続してくる仕組みで、相手の再告知は 60 秒おき。
+   * リレーは購読時刻より新しい出来事しか流さないので、端末の時計が数秒ずれていると
+   * 相手からの応答が捨てられ、相手の次の再告知 (最長 60 秒後) まで待つことになる。
+   */
+  const PRESENCE_CHECK_MS = 70000;
   const presenceSince = Date.now();
   let hadWaiting = false;
   function renderPresence() {
@@ -493,7 +503,13 @@ async function main() {
     maybeMergeLobby();
     if (s.title) sub.push(t('pres.title', s.title));
     if (s.racing) sub.push(t('pres.racing', s.racing));
-    if (!sub.length && !checking) sub.push(t('pres.nobody'));
+    if (s.others === 0) {
+      // 誰も見えないときは、リレーにつながっているかを添える (回線の問題と区別できるように)
+      if (!checking) sub.push(t('pres.nobody'));
+      const r = relayStatus();
+      // 開いた直後はまだつながっていないのが普通なので、確認中のあいだは警告にしない
+      sub.push(r.open ? t('pres.relays', r.open, r.total) : checking ? t('pres.relayConnecting') : t('pres.noRelay'));
+    }
     presenceSub.textContent = sub.join(' / ');
     // ロビー側: 待っている人にも、来そうな人がいるか見せる
     const sub2: string[] = [];
@@ -505,7 +521,7 @@ async function main() {
   renderPresence();
   setInterval(renderPresence, 500);
   // 動作確認用 (tools/presencetest.mjs が読む)
-  (window as never as Record<string, unknown>).__presence = () => presence?.summary() ?? null;
+  (window as never as Record<string, unknown>).__presence = () => presence ? { ...presence.summary(), relays: relayStatus() } : null;
 
   function applyLobby(info: LobbyInfo) {
     if (!net) return;

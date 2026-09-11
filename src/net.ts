@@ -13,13 +13,27 @@
 //     結果をイベントで配る。判定を一箇所に寄せないと、各自の画面で別々に
 //     当たったことになってしまう。
 //   - ホストは部屋を作った人。抜けたら残った中で ID が最小の人へ自動的に移る。
-import { joinRoom, selfId } from 'trystero/nostr';
+import { joinRoom, selfId, getRelaySockets } from 'trystero/nostr';
 import type { JsonValue, MessageAction, Room } from 'trystero/nostr';
 
-// 開発中 (localhost) は別の appId にして、本番の利用者と部屋や presence を共有しない。
+// 開発サーバー (vite) では別の appId にして、本番の利用者と部屋や presence を共有しない。
 // 同じにしておくと、テスト用のブラウザが本番のトップ画面に「見ている人」として映り、
 // テストが本番の利用者の部屋に入ってしまうこともある (実際に起きた)。
-const APP_ID = /^(localhost|127\.0\.0\.1)$/.test(location.hostname) ? 'hiroshima-kart-dev' : 'hiroshima-kart';
+// 開発サーバーから本番の相手と試したいときは ?net=prod を付ける。
+const useProdNet = !import.meta.env.DEV || new URLSearchParams(location.search).get('net') === 'prod';
+const APP_ID = useProdNet ? 'hiroshima-kart' : 'hiroshima-kart-dev';
+/**
+ * シグナリングに使う公開リレーの数。trystero は既定の一覧から appId で決まる順に
+ * この数だけ使う (全員が同じ組になる)。既定の 5 つのうち 1 つは落ちていたので (実測)、
+ * 多めに取って落ちているリレーがあっても相手を見つけられるようにする。
+ */
+const RELAY_CONFIG = { redundancy: 8 };
+
+/** つながっているリレーの数 (トップ画面の「確認中」の説明に出す) */
+export function relayStatus(): { open: number; total: number } {
+  const sockets = Object.values(getRelaySockets() as Record<string, WebSocket>);
+  return { open: sockets.filter(s => s.readyState === WebSocket.OPEN).length, total: sockets.length };
+}
 /** 作成者が誰か分かるまで、参加した側がホストを名乗らずに待つ時間 */
 const HOST_GRACE_MS = 5000;
 
@@ -146,7 +160,7 @@ export class NetSession {
     this.names[selfId] = name;
     this.kind = kind;
     this.creators[selfId] = kind === 'create';
-    this.room = joinRoom({ appId: APP_ID }, `hk-${code}`);
+    this.room = joinRoom({ appId: APP_ID, relayConfig: RELAY_CONFIG }, `hk-${code}`);
 
     this.hi = this.room.makeAction<JsonValue>('hi', {
       onMessage: (d, ctx) => {
@@ -349,7 +363,7 @@ export class Presence {
   onChange: (() => void) | null = null;
 
   constructor() {
-    this.room = joinRoom({ appId: APP_ID }, 'hk-presence');
+    this.room = joinRoom({ appId: APP_ID, relayConfig: RELAY_CONFIG }, 'hk-presence');
     this.st = this.room.makeAction<JsonValue>('st', {
       onMessage: (d, ctx) => {
         const m = d as { s?: string; name?: string; room?: string; deadline?: number } | null;

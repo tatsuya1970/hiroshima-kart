@@ -42,6 +42,8 @@
     /* 絶対配置だと行数が増えたときに .keys と重なるので通常フローに置く */
     #overlay .credit { margin-top: 22px; font-size: 12px; opacity: .6; max-width: 900px; line-height: 1.7; }
     #overlay .credit a { color: inherit; text-decoration: underline; }
+    /* ビルドの識別 (古いページが残っていないかを見分ける) */
+    #buildInfo { margin-top: 8px; font-size: 11px; opacity: .45; font-variant-numeric: tabular-nums; }
     #progress { width: 360px; height: 8px; background: rgba(255,255,255,.2); border-radius: 4px; margin-top: 18px; overflow: hidden; }
     #progress div { height: 100%; width: 0%; background: #ffd83d; transition: width .2s; }
     #quality { margin-top: 16px; font-size: 13px; opacity: .85; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; justify-content: center; }
@@ -215,6 +217,7 @@
     <div class="keys" data-en-html="↑/W: accelerate　↓/S: brake and reverse　←→/A D: steer<br />Shift/Space: drift (release for a mini-turbo)　Ctrl/Enter: use item　C: camera　M: sound">↑/W: アクセル　↓/S: ブレーキ・バック　←→/A D: ハンドル<br />Shift/Space: ドリフト（離してミニターボ）　Ctrl/Enter: アイテム使用　C: カメラ切替　M: 音</div>
     <div class="keys touchKeys" data-en-html="◀ ▶: steer　D: drift (release for a mini-turbo)　★: use item　▼: brake and reverse<br />The kart accelerates by itself. You can slide your thumb between buttons.">◀ ▶: ハンドル　D: ドリフト（離してミニターボ）　★: アイテム使用　▼: ブレーキ・バック<br />アクセルは自動です。指を置いたまま隣のボタンへ滑らせても効きます</div>
     <div class="credit" data-en-html='3D city model: MLIT Project PLATEAU, "3D City Model (Project PLATEAU) Hiroshima City (FY2024)", adapted (<a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noopener">CC BY 4.0</a>) — buildings LOD2 (aerial-photo textures) and LOD1, roads, terrain<br />Hiroden trams, the JR Sanyo Line and the Sanyo Shinkansen run on their real alignments<br /><span style="opacity:.7">Not affiliated with Nintendo</span>'>3D都市モデル: 国土交通省 PLATEAU「3D都市モデル（Project PLATEAU）広島市（2024年度）」を加工して作成 (<a href="https://creativecommons.org/licenses/by/4.0/deed.ja" target="_blank" rel="noopener">CC BY 4.0</a>) / 建築物 LOD2 (実写テクスチャ)・LOD1・道路・地形を使用<br />広島電鉄・JR山陽本線・山陽新幹線は実在の位置に敷設し、車両が走行します<br /><span style="opacity:.7">本作品は任天堂株式会社とは関係がありません</span></div>
+    <div id="buildInfo"></div>
   </div>
   <script type="module" src="/src/main.ts"></script>
 </body>

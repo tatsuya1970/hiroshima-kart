@@ -66,7 +66,10 @@ const JA: Dict = {
   'net.busy': 'この部屋はレース中です',
 
   'pres.checking': '対戦待ちの人がいるか確認しています...',
-  'pres.none': 'いま対戦待ちの人はいません',
+  'pres.none': 'いま対戦待ちの人は見当たりません',
+  'pres.relays': 'リレー {0}/{1} に接続中',
+  'pres.relayConnecting': 'リレーに接続しています...',
+  'pres.noRelay': 'リレーに接続できていません（回線を確認してください）',
   'pres.waiting': 'いま {0} 人が対戦待ち（{1}）',
   'pres.waitingPeople': '対戦相手を待っています',
   'pres.joinStart': '対戦PLAY を押すと 2 人になり、カウントダウンが始まります',
@@ -131,7 +134,10 @@ const EN: Dict = {
   'net.busy': 'This room is mid-race',
 
   'pres.checking': 'Checking whether anyone is waiting...',
-  'pres.none': 'No one is waiting for a race right now',
+  'pres.none': 'No one seems to be waiting right now',
+  'pres.relays': 'connected to {0}/{1} relays',
+  'pres.relayConnecting': 'connecting to relays...',
+  'pres.noRelay': 'Not connected to any relay (check your connection)',
   'pres.waiting': '{0} waiting for a race ({1})',
   'pres.waitingPeople': 'waiting for an opponent',
   'pres.joinStart': 'Press ONLINE PLAY to make it two and start the countdown',
