@@ -15,6 +15,7 @@
 //   - ホストは部屋を作った人。抜けたら残った中で ID が最小の人へ自動的に移る。
 import { joinRoom, selfId, getRelaySockets } from 'trystero/nostr';
 import type { JsonValue, MessageAction, Room } from 'trystero/nostr';
+import { assetUrl } from './geo';
 
 // 開発サーバー (vite) では別の appId にして、本番の利用者と部屋や presence を共有しない。
 // 同じにしておくと、テスト用のブラウザが本番のトップ画面に「見ている人」として映り、
@@ -33,6 +34,98 @@ const RELAY_CONFIG = { redundancy: 8 };
 export function relayStatus(): { open: number; total: number } {
   const sockets = Object.values(getRelaySockets() as Record<string, WebSocket>);
   return { open: sockets.filter(s => s.readyState === WebSocket.OPEN).length, total: sockets.length };
+}
+
+// ---- TURN (NAT 越えの中継) ----
+//
+// WebRTC の直結は STUN で自分の外側の住所を知って相手に伝える方式なので、携帯回線
+// (CGNAT, 対称型 NAT) と家庭の回線の組み合わせでは直結できないことがある。そのとき
+// だけ通信を中継するのが TURN で、これはサーバーが要る。誰でも使える無料の公開 TURN
+// (Open Relay) は候補が取れなくなっていた (2026-09 実測) ので、設定はサイトの持ち主が
+// 用意する: public/turn.json に { "iceServers": [...] } を置くか、
+// { "url": "https://..." } で ICE サーバーの一覧を返す URL (metered.ca 等) を指す。
+// 無ければ STUN だけで動く (直結できる相手とだけつながる)。
+type IceServer = { urls: string | string[]; username?: string; credential?: string };
+let turnConfig: IceServer[] = [];
+
+export async function loadTurn(): Promise<number> {
+  try {
+    const res = await fetch(assetUrl('turn.json'), { cache: 'no-store' });
+    if (!res.ok) return 0;
+    let cfg: unknown = await res.json();
+    const asObj = cfg as { url?: unknown; iceServers?: unknown } | null;
+    if (asObj && typeof asObj.url === 'string') cfg = await (await fetch(asObj.url)).json();
+    const list = Array.isArray(cfg) ? cfg : Array.isArray((cfg as { iceServers?: unknown })?.iceServers) ? (cfg as { iceServers: unknown[] }).iceServers : [];
+    turnConfig = (list as IceServer[]).filter(s => s && s.urls);
+    return turnConfig.length;
+  } catch {
+    return 0;
+  }
+}
+
+/** TURN が設定されているか (診断表示用) */
+export function hasTurn(): boolean {
+  return turnConfig.length > 0;
+}
+
+export type NatKind = 'cone' | 'symmetric' | 'blocked' | 'unknown';
+
+/**
+ * NAT の種類を調べる (診断表示用)。
+ * STUN サーバー 2 つに聞いて、外側の口 (住所:ポート) が相手ごとに変わるなら対称型 NAT で、
+ * 携帯回線に多い。対称型どうし、または対称型と家庭用ルータ (ポート制限コーン) の組み合わせは
+ * TURN 無しでは直結できない。srflx 候補が 1 つも取れなければ STUN が塞がれている。
+ * TURN が設定されていれば relay 候補が取れるかも見る。
+ */
+export async function natProbe(timeoutMs = 4000): Promise<{ nat: NatKind; relay: boolean }> {
+  if (typeof RTCPeerConnection === 'undefined') return { nat: 'unknown', relay: false };
+  try {
+    const pc = new RTCPeerConnection({
+      iceServers: [{ urls: 'stun:stun.l.google.com:19302' }, { urls: 'stun:stun.cloudflare.com:3478' }, ...turnConfig],
+    });
+    pc.createDataChannel('probe');
+    // 同じ内側の口 (raddr:rport) から見た外側の口を集める。IPv4 と IPv6 は別に数える
+    const mapped = new Map<string, Set<string>>();
+    let relay = false;
+    await new Promise<void>(resolve => {
+      const timer = setTimeout(resolve, timeoutMs);
+      pc.onicecandidate = e => {
+        const c = e.candidate;
+        if (!c) { clearTimeout(timer); resolve(); return; }
+        const m = /typ (\w+)(?: raddr (\S+) rport (\d+))?/.exec(c.candidate);
+        const type = c.type ?? m?.[1];
+        if (type === 'relay') relay = true;
+        if (type !== 'srflx') return;
+        const addr = c.address ?? /candidate:\S+ \d+ \S+ \d+ (\S+) (\d+)/.exec(c.candidate)?.[1] ?? '';
+        const port = c.port ?? Number(/candidate:\S+ \d+ \S+ \d+ \S+ (\d+)/.exec(c.candidate)?.[1] ?? 0);
+        const family = addr.includes(':') ? 'v6' : 'v4';
+        const base = `${family} ${c.relatedAddress ?? m?.[2] ?? ''}:${c.relatedPort ?? m?.[3] ?? ''}`;
+        (mapped.get(base) ?? mapped.set(base, new Set()).get(base)!).add(`${addr}:${port}`);
+      };
+      pc.createOffer().then(o => pc.setLocalDescription(o)).catch(() => { clearTimeout(timer); resolve(); });
+    });
+    pc.close();
+    if (!mapped.size) return { nat: 'blocked', relay };
+    const symmetric = [...mapped.values()].some(s => s.size >= 2);
+    return { nat: symmetric ? 'symmetric' : 'cone', relay };
+  } catch {
+    return { nat: 'unknown', relay: false };
+  }
+}
+
+/**
+ * アプリ内ブラウザ (Facebook / Instagram / LINE / X など) かどうか。
+ * WebView は WebRTC が制限されていたり、裏に回ると接続が切れたりして対戦が不安定なので、
+ * Safari / Chrome で開くよう勧める。
+ */
+export function inAppBrowser(): string {
+  const ua = navigator.userAgent;
+  if (/FBAN|FBAV|FB_IAB/.test(ua)) return 'Facebook';
+  if (/Instagram/.test(ua)) return 'Instagram';
+  if (/\bLine\//i.test(ua)) return 'LINE';
+  if (/Twitter|X11; .*TwitterAndroid/.test(ua)) return 'X';
+  if (/MicroMessenger/.test(ua)) return 'WeChat';
+  return '';
 }
 /** 作成者が誰か分かるまで、参加した側がホストを名乗らずに待つ時間 */
 const HOST_GRACE_MS = 5000;
@@ -160,7 +253,7 @@ export class NetSession {
     this.names[selfId] = name;
     this.kind = kind;
     this.creators[selfId] = kind === 'create';
-    this.room = joinRoom({ appId: APP_ID, relayConfig: RELAY_CONFIG }, `hk-${code}`);
+    this.room = joinRoom({ appId: APP_ID, relayConfig: RELAY_CONFIG, turnConfig }, `hk-${code}`);
 
     this.hi = this.room.makeAction<JsonValue>('hi', {
       onMessage: (d, ctx) => {
@@ -363,7 +456,7 @@ export class Presence {
   onChange: (() => void) | null = null;
 
   constructor() {
-    this.room = joinRoom({ appId: APP_ID, relayConfig: RELAY_CONFIG }, 'hk-presence');
+    this.room = joinRoom({ appId: APP_ID, relayConfig: RELAY_CONFIG, turnConfig }, 'hk-presence');
     this.st = this.room.makeAction<JsonValue>('st', {
       onMessage: (d, ctx) => {
         const m = d as { s?: string; name?: string; room?: string; deadline?: number } | null;

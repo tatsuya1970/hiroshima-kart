@@ -5,7 +5,7 @@ import { Track } from './track';
 import { buildBuildings, type BuildingsData } from './buildings';
 import { Kart, type RacerDef, type ItemType } from './kart';
 import { ItemSystem } from './items';
-import { NetSession, Presence, newOpenCode, normalizeRoomCode, relayStatus, COUNTDOWN_SEC, type LobbyInfo, type NetEvent, type Pose, type RoomKind } from './net';
+import { NetSession, Presence, newOpenCode, normalizeRoomCode, relayStatus, loadTurn, hasTurn, natProbe, inAppBrowser, COUNTDOWN_SEC, type LobbyInfo, type NetEvent, type NatKind, type Pose, type RoomKind } from './net';
 import { Hud, drawCourseMap } from './hud';
 import { InputManager } from './input';
 import { AudioSystem } from './audio';
@@ -104,10 +104,15 @@ async function main() {
   const buildInfo = document.getElementById('buildInfo');
   if (buildInfo) buildInfo.textContent = `build ${__BUILD__.commit} (${new Date(__BUILD__.time).toLocaleString()})`;
   // トップ画面の「対戦待ち」表示。相手とつながるまで 8〜19 秒かかるので、
-  // 読み込みの裏で先に探し始める (?debug=1 はロビーを通らないので入らない)
+  // 読み込みの裏で先に探し始める (?debug=1 はロビーを通らないので入らない)。
+  // TURN の設定 (public/turn.json) があれば先に読む。部屋に入るときに渡す必要があるため
   let presence: Presence | null = null;
+  /** NAT の種類と TURN の可否 (診断表示用)。調べ終わるまで null */
+  let netProbe: { nat: NatKind; relay: boolean } | null = null;
   if (!dbg.get('debug')) {
+    await Promise.race([loadTurn(), new Promise(r => setTimeout(r, 4000))]);
     try { presence = new Presence(); } catch (e) { console.warn('対戦待ちの確認に入れませんでした', e); }
+    void natProbe().then(r => { netProbe = r; });
   }
   // 低画質では MSAA も切る (内蔵 GPU では帯域を食う)
   const renderer = new THREE.WebGLRenderer({ canvas, antialias: quality.level !== 'low', powerPreference: 'high-performance' });
@@ -459,6 +464,7 @@ async function main() {
   const presenceMain = byId<HTMLSpanElement>('presenceMain');
   const presenceSub = byId<HTMLDivElement>('presenceSub');
   const presence2 = byId<HTMLDivElement>('presence2');
+  const browserHint = byId<HTMLDivElement>('browserHint');
   /**
    * 誰ともつながっていない間は「確認中」。これを過ぎたら「見当たりません」にする。
    * 相手が先にいても、見つかるまで 1 分近くかかることがある: trystero の nostr 戦略は
@@ -509,19 +515,36 @@ async function main() {
       const r = relayStatus();
       // 開いた直後はまだつながっていないのが普通なので、確認中のあいだは警告にしない
       sub.push(r.open ? t('pres.relays', r.open, r.total) : checking ? t('pres.relayConnecting') : t('pres.noRelay'));
+      sub.push(...netHints());
     }
     presenceSub.textContent = sub.join(' / ');
     // ロビー側: 待っている人にも、来そうな人がいるか見せる
     const sub2: string[] = [];
     if (s.title) sub2.push(t('pres.lobbyTitle', s.title));
     if (s.racing) sub2.push(t('pres.racing', s.racing));
+    if (s.others === 0) sub2.push(...netHints());
     presence2.textContent = sub2.join(' / ');
   }
+  /**
+   * 相手が見えない原因になりやすい回線の事情 (対称型 NAT・STUN 不通・TURN の有無)。
+   * 直結できない組み合わせでは TURN が無いと永遠に相手が見えないので、それと分かるようにする。
+   */
+  function netHints(): string[] {
+    const out: string[] = [];
+    if (!netProbe) return out;
+    if (netProbe.nat === 'symmetric') out.push(hasTurn() ? (netProbe.relay ? t('pres.natSymTurn') : t('pres.natSymTurnNg')) : t('pres.natSym'));
+    else if (netProbe.nat === 'blocked') out.push(t('pres.natBlocked'));
+    else if (hasTurn() && !netProbe.relay) out.push(t('pres.turnNg'));
+    return out;
+  }
+  // アプリ内ブラウザ (Facebook 等) は WebRTC が不安定なので、Safari / Chrome で開くよう勧める
+  const iab = inAppBrowser();
+  if (iab) { browserHint.textContent = t('pres.inApp', iab); browserHint.style.display = ''; }
   if (presence) presence.onChange = renderPresence;
   renderPresence();
   setInterval(renderPresence, 500);
   // 動作確認用 (tools/presencetest.mjs が読む)
-  (window as never as Record<string, unknown>).__presence = () => presence ? { ...presence.summary(), relays: relayStatus() } : null;
+  (window as never as Record<string, unknown>).__presence = () => presence ? { ...presence.summary(), relays: relayStatus(), probe: netProbe, turn: hasTurn(), inApp: iab } : null;
 
   function applyLobby(info: LobbyInfo) {
     if (!net) return;

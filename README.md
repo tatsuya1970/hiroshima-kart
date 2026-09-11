@@ -50,7 +50,7 @@ PLATEAU の LOD2 は 1 棟につき 1 枚のテクスチャ画像（512〜2048px
 
 ## 日本語 / 英語
 
-日本語以外の環境からアクセスすると英語で表示されます。判定は `?lang=ja|en` → `localStorage` → `navigator.language` の順です（`src/i18n.ts`）。IP から国を見るにはサーバーが要るので、GitHub Pages の静的配信では使えません。日本語環境から英語で見たい人（その逆も）がいるので、画質ボタンの隣に手動の切り替えを必ず出しています。切り替えは看板やラベルを作り直す必要があるため再読み込みで反映します。
+**言語ごとに URL が分かれています。** 日本語は `/`、英語は `/en/` です。英語に実体のある URL を与えているのは検索と SNS のためで、理由は後述の「SEO」に書いてあります。判定は `/en/` → `?lang=ja|en` → `localStorage` → `navigator.language` の順です（`src/i18n.ts`）。IP から国を見るにはサーバーが要るので、GitHub Pages の静的配信では使えません。日本語環境から英語で見たい人（その逆も）がいるので、画質ボタンの隣に手動の切り替えを必ず出しています。切り替えは看板やラベルを作り直す必要があるため、その言語の URL へ移動して読み込み直します。開発サーバーには `/en/` が無いので、そこでは `?lang=en` を使います。
 
 差し替えの場所は 2 つに分けています。
 
@@ -68,6 +68,36 @@ PLATEAU の LOD2 は 1 棟につき 1 枚のテクスチャ画像（512〜2048px
 ```
 
 `?lang=en` を付ければ日本語環境でも英語で確認できます。
+
+## SEO
+
+検索と SNS のカードのために、次を入れてあります。**日本語と英語で別々の URL** を持たせているのが要です。
+
+| URL | 言語 | 中身 |
+| --- | --- | --- |
+| `https://tatsuya1970.github.io/hiroshima-kart/` | 日本語 | `dist/index.html` |
+| `https://tatsuya1970.github.io/hiroshima-kart/en/` | 英語 | `dist/en/index.html`（中身は同じで head だけ英語） |
+
+**なぜ URL を分けるのか。** X や Facebook のカードを作るクローラは JavaScript を実行しません。1 つの URL で実行時に英語へ差し替えても、共有カードは日本語のままになります。検索も、1 つの URL に 2 言語が同居していると、どちらの言語のページとして出すか決めきれません。
+
+**英語ページの作り方。** ページを二重管理しないよう、`index.html` は 1 つだけです。head の言語依存部分を `<!-- ==== SEO:ja ==== -->` と `<!-- ==== /SEO:ja ==== -->` で囲んであり、ビルド後に `tools/build_en_page.mjs` がそこを `tools/seo-en.html` の中身へ差し替え、`<html lang>` を `en` にして `dist/en/index.html` として書き出します（`npm run build` に組み込み済み）。**目印のコメントを消さないでください。** 画面の文言は `applyDomLang()` が `/en/` を見て英語にします。
+
+入れてあるもの。
+
+| 項目 | 場所 |
+| --- | --- |
+| 見出しと説明（言語別） | `index.html` の SEO ブロック / `tools/seo-en.html` |
+| canonical と hreflang（ja / en / x-default） | 同上。各ページが自分を canonical に指す |
+| OGP と Twitter カード（`summary_large_image`） | 同上 |
+| 構造化データ（schema.org の `VideoGame`） | 同上。JSON-LD |
+| カード画像 1200x630 | `public/ogp.png`（日本語）/ `public/ogp-en.png`（英語） |
+| サイトマップ | `public/sitemap.xml`。2 言語を hreflang で結んである |
+
+カード画像は `PORT=5180 node tools/make_ogp.mjs` で作り直せます。原爆ドーム前をゲーム内で撮り、HUD を消してタイトル帯を重ねたものです。文字はブラウザに描かせているので日本語のフォントも崩れません。背景を変えたいときは `QUERY="debug=1&wp=8&cam=0&nofps=1&q=high"` の経由地とカメラを差し替えてください。
+
+**robots.txt は現状読まれません。** クローラが読むのはドメイン直下の `/robots.txt` だけで、プロジェクトページでは `/hiroshima-kart/robots.txt` に置かれるためです。置いてはありますが（独自ドメインに移したときに効きます）、サイトマップは Search Console に直接登録してください。
+
+**ドメインを変えるとき。** URL は `index.html` の SEO ブロック、`tools/seo-en.html`、`public/sitemap.xml`、`public/robots.txt` の 4 か所に書いてあります。GitHub Pages で独自ドメインを設定すると `github.io` 側は 301 で転送されるので、リンクの評価は引き継がれます。
 
 ## オンライン対戦
 
@@ -106,6 +136,26 @@ trystero 0.25 は同じ appId なら部屋をまたいで WebRTC 接続を共有
 3. **リレーにつながっていない。** 誰も見えないあいだは「リレー 4/8 に接続中」のように接続数を添えています。0 なら回線か、社内ネットワーク等で WebSocket が塞がれています。trystero が既定で選ぶリレーのうち 1 つは落ちていたので（`nostr.data.haus`、実測）、使うリレーを 5 から 8 に増やしてあります（`src/net.ts` の `RELAY_CONFIG`。全員が同じ組になるよう appId から順が決まります）。
 4. **開発サーバーと本番は別の世界。** `vite` の開発サーバーでは appId を `hiroshima-kart-dev` にして本番の利用者と切り離しています（テスト用のブラウザが本番の画面に映っていたため）。PC の開発サーバーとスマホの本番ページでは互いに見えません。開発サーバーから本番の相手と試すときは `?net=prod` を付けてください。
 5. **待っている側の画面が消えている。** スマホで画面を消したりタブを裏にしたりすると、ブラウザが接続を止めるので相手から見えなくなります。画面に戻れば数秒で復帰します。
+6. **携帯回線 (5G / 4G) と家庭の回線の組み合わせ。** リレーにつながっていて告知も届いているのに相手が見えないときは、ここがいちばん怪しいです。WebRTC の直結は STUN で自分の外側の住所を相手に伝える方式で、携帯回線の CGNAT（対称型 NAT）と家庭のルータ（ポート制限コーン）の組み合わせでは直結できません。これを中継するのが TURN で、サーバーが要ります。トップ画面では STUN サーバー 2 つに聞いて NAT の種類を推定し、対称型なら「相手と直結しにくい種類の NAT です」と出します（`src/net.ts` の `natProbe`）。対処は下の「TURN の設定」です。
+7. **アプリ内ブラウザ (Facebook / Instagram / LINE / X)。** WebView は WebRTC が制限されていたり、裏に回ると接続が切れたりします。検出したら「Safari / Chrome で開いてください」と出します（`inAppBrowser`）。
+
+**TURN の設定。** 誰でも使える無料の公開 TURN（Open Relay）は候補が取れなくなっていた（2026-09 実測）ので、サイトの持ち主が用意します。`public/turn.json` を置くと、ページ読み込み時に読んで trystero の `turnConfig` に渡します。無ければ STUN だけで動きます（直結できる相手とだけつながる）。
+
+- いちばん簡単なのは [metered.ca](https://www.metered.ca/stun-turn) の無料プラン（月 0.5 GB）。登録して TURN の API キーを取り、`public/turn.json` に次のように書きます。API キーはページに載るので公開されますが、できるのは自分の枠を使った TURN 資格情報の発行だけです。
+
+  ```json
+  { "url": "https://<アプリ名>.metered.live/api/v1/turn/credentials?apiKey=<API キー>" }
+  ```
+
+- 自前の TURN（coturn 等）や固定の資格情報なら、ICE サーバーの一覧をそのまま書きます。
+
+  ```json
+  { "iceServers": [{ "urls": ["turn:example.com:3478", "turns:example.com:5349"], "username": "u", "credential": "p" }] }
+  ```
+
+- [Cloudflare の TURN](https://developers.cloudflare.com/realtime/turn/)（月 1 TB まで無料）は資格情報を短命で発行する API なので、鍵をページに載せられません。Cloudflare Workers 等で発行する URL を作り、その URL を `"url"` に書きます（返す JSON は `iceServers` の配列、または `{ "iceServers": [...] }`）。
+
+中継が通っているかは、対称型 NAT の端末でトップ画面に「TURN で中継できます」と出るかで分かります。レースの位置情報は 1 組あたり毎秒 10 KB ほどなので、5 分のレースで 3〜4 MB です。
 
 **相手と初めてつながるまでに 8〜19 秒かかります**（公開リレー経由の WebRTC ハンドシェイク。実測値）。ただし上記の presence でページ読み込み中につながっていれば、ロビーでの合流は 2 秒ほどです（`tools/nettest.mjs` で実測 1.9 秒）。それでも人が集まらないようなら `src/net.ts` の `OPEN_PERIOD` を延ばしてください。
 
@@ -182,6 +232,8 @@ npm run dev             # http://localhost:5180/
 BASE_PATH=/hiroshima-kart/ npm run build
 BASE_PATH=/hiroshima-kart/ npm run preview   # http://127.0.0.1:4173/hiroshima-kart/
 ```
+
+`npm run build` は最後に `tools/build_en_page.mjs` を呼び、英語版 `dist/en/index.html` を書き出します（「SEO」の項）。Git Bash から実行するときは `MSYS_NO_PATHCONV=1` を付けてください。付けないと `/hiroshima-kart/` が Windows のパスへ変換され、`base` が `/Program Files/Git/hiroshima-kart/` になります。
 
 `public/` 配下のアセットは絶対パスで直書きせず、`src/geo.ts` の `assetUrl()` が `import.meta.env.BASE_URL` を基準に解決します。新しくデータを読む箇所を足すときはこれを使ってください。
 
@@ -293,6 +345,8 @@ tools/shots.mjs            任意地点のスクリーンショット
 tools/airace.mjs           全 AI による高速レース検証
 tools/nettest.mjs          オンライン対戦の疎通確認 (ブラウザ 2 つ)
 tools/presencetest.mjs     トップ画面の「対戦待ち」表示と、待っている人の部屋へ即座に入れるかの確認
+tools/make_ogp.mjs         SNS のカード画像 (1200x630, 日本語 / 英語) を作る
+tools/build_en_page.mjs    ビルド後に英語版 dist/en/index.html を書き出す (head だけ差し替え)
 tools/probe_scene.mjs      画面前方の物体をレイキャストで特定
 tools/probe_uv.mjs         UV とアトラス参照先の特定
 tools/check_trains.mjs     車両が走行しているかの確認

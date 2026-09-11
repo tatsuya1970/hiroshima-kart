@@ -3,7 +3,54 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover" />
-  <title>Hiroshima Kart — 広島グランプリ / Hiroshima Grand Prix</title>
+  <!-- ==== SEO:ja ====
+       言語ごとの見出し・説明・カード。英語版は /en/ に同じ体裁で置いてあり、
+       tools/build_en_page.mjs がビルド後にこのブロックを英語版へ差し替えて書き出す。
+       囲みのコメント行は目印なので消さないこと。
+       ドメインを変えたら、この中の URL と public/sitemap.xml を直す。 -->
+  <title>広島グランプリ Hiroshima Kart｜PLATEAU 3D都市モデルで走るブラウザカートレース</title>
+  <meta name="description" content="実在の広島の街を走る無料のブラウザカートレース。国土交通省 PLATEAU の3D都市モデルから起こした1周7.31kmのコースを、原爆ドーム前や広島駅を通って走ります。インストール不要、スマホ対応、最大8人のオンライン対戦つき。" />
+  <link rel="canonical" href="https://tatsuya1970.github.io/hiroshima-kart/" />
+  <link rel="alternate" hreflang="ja" href="https://tatsuya1970.github.io/hiroshima-kart/" />
+  <link rel="alternate" hreflang="en" href="https://tatsuya1970.github.io/hiroshima-kart/en/" />
+  <link rel="alternate" hreflang="x-default" href="https://tatsuya1970.github.io/hiroshima-kart/" />
+  <meta property="og:type" content="website" />
+  <meta property="og:site_name" content="Hiroshima Kart" />
+  <meta property="og:title" content="広島グランプリ Hiroshima Kart｜PLATEAUで走るブラウザカートレース" />
+  <meta property="og:description" content="実在の広島の街を走る無料のブラウザカートレース。PLATEAU の3D都市モデルから起こした1周7.31kmのコース。インストール不要、スマホ対応、最大8人のオンライン対戦つき。" />
+  <meta property="og:url" content="https://tatsuya1970.github.io/hiroshima-kart/" />
+  <meta property="og:image" content="https://tatsuya1970.github.io/hiroshima-kart/ogp.png" />
+  <meta property="og:image:width" content="1200" />
+  <meta property="og:image:height" content="630" />
+  <meta property="og:image:alt" content="原爆ドーム前を走るカートと「HIROSHIMA KART 広島グランプリ」のタイトル" />
+  <meta property="og:locale" content="ja_JP" />
+  <meta property="og:locale:alternate" content="en_US" />
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:title" content="広島グランプリ Hiroshima Kart｜PLATEAUで走るブラウザカートレース" />
+  <meta name="twitter:description" content="実在の広島の街を走る無料のブラウザカートレース。1周7.31km、最大8人のオンライン対戦つき。インストール不要。" />
+  <meta name="twitter:image" content="https://tatsuya1970.github.io/hiroshima-kart/ogp.png" />
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "VideoGame",
+    "name": "広島グランプリ Hiroshima Kart",
+    "url": "https://tatsuya1970.github.io/hiroshima-kart/",
+    "image": "https://tatsuya1970.github.io/hiroshima-kart/ogp.png",
+    "description": "実在の広島の街を走る無料のブラウザカートレース。国土交通省 PLATEAU の3D都市モデルから起こした1周7.31kmのコースを走ります。",
+    "inLanguage": ["ja", "en"],
+    "genre": "Racing",
+    "gamePlatform": "Web browser",
+    "applicationCategory": "GameApplication",
+    "operatingSystem": "Web browser (WebGL2)",
+    "playMode": ["SinglePlayer", "MultiPlayer"],
+    "offers": { "@type": "Offer", "price": "0", "priceCurrency": "JPY" },
+    "author": { "@type": "Person", "name": "tatsuya-takemura" },
+    "isBasedOn": "https://www.mlit.go.jp/plateau/",
+    "contentLocation": { "@type": "City", "name": "広島市", "address": { "@type": "PostalAddress", "addressCountry": "JP", "addressRegion": "広島県" } }
+  }
+  </script>
+  <!-- ==== /SEO:ja ==== -->
+  <meta name="theme-color" content="#0b1a2a" />
   <!-- チェッカーフラッグ。データ URI なので追加のリクエストが出ない -->
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='6' fill='%230b1a2a'/><g fill='%23fff'><rect x='6' y='6' width='5' height='5'/><rect x='16' y='6' width='5' height='5'/><rect x='11' y='11' width='5' height='5'/><rect x='21' y='11' width='5' height='5'/><rect x='6' y='16' width='5' height='5'/><rect x='16' y='16' width='5' height='5'/><rect x='11' y='21' width='5' height='5'/><rect x='21' y='21' width='5' height='5'/></g></svg>" />
   <style>
@@ -88,6 +135,8 @@
     #presence.live .pdot { background: #58dc78; box-shadow: 0 0 8px #58dc78; animation: pulse 1.2s infinite; }
     #presence b { color: #ffd83d; }
     #presenceSub { font-size: 13px; opacity: .7; }
+    /* アプリ内ブラウザへの注意 (Facebook / LINE 等で開いたときだけ出す) */
+    #browserHint { margin-top: 8px; font-size: 13px; color: #ffd83d; line-height: 1.6; }
     @keyframes pulse { 50% { opacity: .35; } }
     #results { display: none; }
     #results table { margin: 0 auto 20px; border-collapse: collapse; font-size: 20px; }
@@ -185,6 +234,7 @@
         <div class="row"><label for="playerName" data-en="Your name">対戦での なまえ</label> <input id="playerName" maxlength="10" placeholder="なまえ" data-en-placeholder="name" /></div>
         <div id="netNote" data-en-html="<b>ONLINE PLAY</b> puts you in a lobby. <b>Once two players are in, a 30-second countdown starts</b> and the race begins. Up to 8 players; empty seats are filled by AI. A jingle plays when an opponent arrives. Browser-to-browser connection, no server."><b>対戦PLAY</b> を押すとロビーに入ります。<b>2 人そろうと 30 秒のカウントダウン</b>が始まり、発走します。最大 8 人、空いた枠は AI が走ります。相手が来ると音で知らせます。通信はブラウザ同士の直接接続です（サーバーはありません）。</div>
         <div id="presence" class="checking"><span class="pdot"></span><span id="presenceMain" data-en="Checking whether anyone is waiting...">対戦待ちの人がいるか確認しています...</span><div id="presenceSub"></div></div>
+        <div id="browserHint" style="display:none"></div>
         <!--
           合言葉で部屋を作る方式は、公開ロビーに切り替えたので隠してあります。
           同時に遊ぶ人が少ないうちは、待ち時間が読めるほうが遊びやすいためです。

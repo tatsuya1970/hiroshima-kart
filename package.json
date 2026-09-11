@@ -6,7 +6,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "tsc --noEmit && vite build",
+    "build": "tsc --noEmit && vite build && node tools/build_en_page.mjs",
     "preview": "vite preview",
     "data:download": "node tools/download_plateau.mjs",
     "data:convert": "node tools/convert_citygml.mjs",
