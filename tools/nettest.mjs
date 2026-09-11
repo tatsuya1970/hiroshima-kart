@@ -1,11 +1,11 @@
 // オンライン対戦の疎通確認 (開発用)
 //   PORT=5181 node tools/nettest.mjs
-// ブラウザを 2 つ立ち上げて公開ロビーに入り、30 秒のカウントダウンで自動発走し、
-// 相手のカートが動いて見えるかを調べる。
+// ブラウザを 2 つ立ち上げて公開ロビーに入り、2 人そろって始まる 30 秒のカウントダウンで
+// 自動発走し、相手のカートが動いて見えるかを調べる。
 //
-// 読み込みに時間がかかるので、2 つ同時に開いてから「みんなで走る」を同時に押す。
-// 公開ロビーの部屋は時計で 30 秒ごとに区切られるため、押す時刻がずれると
-// 別々の部屋 (次のレース) に入ってしまう。
+// 2 つ同時に押すので、お互いの「対戦待ち」が届く前にそれぞれ部屋を作ることがある。
+// その場合は 1 人で待っている側が相手の部屋へ移って合流する (maybeMergeLobby) ので、
+// 合流までの秒数もここで分かる。
 import { chromium } from 'playwright';
 
 const BASE = `http://localhost:${process.env.PORT ?? 5180}/`;
@@ -30,13 +30,6 @@ async function open(label, name) {
 // 2 つ同時に読み込む
 const [a, b] = await Promise.all([open('A', 'ホスト'), open('B', 'ゲスト')]);
 
-// 同じ 30 秒枠に入れるよう、枠の頭で押す
-const waitForBucketStart = async () => {
-  const ms = Date.now() % 30000;
-  const rest = ms < 2000 ? 0 : 30000 - ms + 500;
-  if (rest) { console.log(`枠の頭まで ${(rest / 1000).toFixed(1)} 秒待ちます`); await a.waitForTimeout(rest); }
-};
-await waitForBucketStart();
 const clickedAt = Date.now();
 await Promise.all([a.click('#openBtn'), b.click('#openBtn')]);
 console.log('公開ロビーに入りました');

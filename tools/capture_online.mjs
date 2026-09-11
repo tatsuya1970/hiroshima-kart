@@ -5,8 +5,8 @@
 // タイトル → 公開ロビー (カウントダウン) → レースまでを両方の画面で録画し、
 // 切り出し用の経過秒を marks.json に書き出す。
 //
-// 公開ロビーの部屋は時計で 30 秒ごとに区切られるので、枠の頭で 2 つ同時に押す。
-// ずれると別々の部屋 (次のレース) に入ってしまう。
+// 公開ロビーは 2 人そろってから 30 秒のカウントダウンが始まる。2 つ同時に押すと
+// それぞれ部屋を作ることがあるが、1 人で待つ側が相手の部屋へ移って合流する。
 import { chromium } from 'playwright';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
@@ -47,10 +47,6 @@ const marks = {};
 marks.titleHost = (Date.now() - A.start) / 1000;
 await A.page.waitForTimeout(3500);
 
-// 枠の頭で 2 つ同時に押す (締切まで 30 秒あるので接続が間に合う)
-const ms = Date.now() % 30000;
-const rest = ms < 1500 ? 0 : 30000 - ms + 400;
-if (rest) { console.log(`枠の頭まで ${(rest / 1000).toFixed(1)} 秒待ちます`); await A.page.waitForTimeout(rest); }
 await Promise.all([A.page.click('#openBtn'), B.page.click('#openBtn')]);
 console.log('公開ロビーに入りました');
 

@@ -60,4 +60,11 @@ export class AudioSystem {
   bump() { this.beep(90, 0.12, 'square', 0.2); }
   lap() { this.beep(523, 0.15, 'square', 0.25); setTimeout(() => this.beep(659, 0.15, 'square', 0.25), 150); setTimeout(() => this.beep(784, 0.3, 'square', 0.25), 300); }
   finish() { [523, 659, 784, 1047].forEach((f, i) => setTimeout(() => this.beep(f, 0.35, 'square', 0.3), i * 180)); }
+  /** 対戦相手が来た合図 (短いファンファーレ)。ロビーで待っているときに鳴らす */
+  opponent() {
+    const melody = [523, 659, 784, 1047, 784, 1047, 1319];
+    melody.forEach((f, i) => setTimeout(() => this.beep(f, i === melody.length - 1 ? 0.7 : 0.16, 'triangle', 0.35), i * 130));
+    // 主旋律の下に和音を軽く添える
+    [[262, 0], [330, 260], [392, 520], [523, 780]].forEach(([f, d]) => setTimeout(() => this.beep(f, 0.5, 'square', 0.1), d));
+  }
 }

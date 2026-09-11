@@ -5,7 +5,7 @@ import { Track } from './track';
 import { buildBuildings, type BuildingsData } from './buildings';
 import { Kart, type RacerDef, type ItemType } from './kart';
 import { ItemSystem } from './items';
-import { NetSession, Presence, openRoom, normalizeRoomCode, type LobbyInfo, type NetEvent, type Pose, type RoomKind } from './net';
+import { NetSession, Presence, newOpenCode, normalizeRoomCode, COUNTDOWN_SEC, type LobbyInfo, type NetEvent, type Pose, type RoomKind } from './net';
 import { Hud, drawCourseMap } from './hud';
 import { InputManager } from './input';
 import { AudioSystem } from './audio';
@@ -330,8 +330,10 @@ async function main() {
   nameInput.value = localStorage.getItem('hk.name') ?? '';
   // ?room=XXXXX 付きのリンクなら合言葉の部屋へ (UI からは隠したが経路は残してある)
   const linkRoom = normalizeRoomCode(params.get('room') ?? '');
-  /** 公開ロビーの締切 (ミリ秒)。合言葉の部屋では 0 = カウントダウン無し */
-  let deadline = 0;
+  /** 席に着いた人間の数。増えたら「対戦相手が来た」と知らせる */
+  let lastHumans = 0;
+  /** 対戦待ちで入ったときの名前 (presence に載せる) */
+  let myName = '';
 
   /** 名前の吹き出し (誰がどのカートか分かるように) */
   const labels: (THREE.Sprite | null)[] = karts.map(() => null);
@@ -368,24 +370,83 @@ async function main() {
       return `<li><span class="dot" style="background:${col}"></span>${esc(net!.names[id] ?? t('lobby.connecting'))}<span class="tag">${tags}</span></li>`;
     }).join('');
     const ai = Math.max(0, RACERS.length - ids.length);
-    netNote2.textContent = t('lobby.status', ids.length, ai) + (net.isHost ? '' : t('lobby.waitHost'));
+    // 公開ロビーで 1 人のときは「相手が来るまで待つ」ことを伝える
+    netNote2.textContent = net.kind === 'open' && ids.length < 2
+      ? t('lobby.alone', COUNTDOWN_SEC)
+      : t('lobby.status', ids.length, ai) + (net.isHost ? '' : t('lobby.waitHost'));
     goBtn.disabled = !net.isHost || net.started;
   }
 
   /**
-   * 公開ロビーのカウントダウン。締切は壁時計から全員が同じ値を出せるので、
-   * 表示は各自で進める。発走の合図だけはホストが出して足並みを揃え、
-   * 締切を 2 秒過ぎても合図が来なければ自分で始める (ホストが落ちたとき用)。
+   * 公開ロビーのカウントダウン。2 人そろった時点でホストが締切を決めて座席表に載せる
+   * (LobbyInfo.deadline)。1 人のあいだは締切が無く「対戦相手を待っています」と出す。
+   * 発走の合図はホストが出して足並みを揃え、締切を 2 秒過ぎても合図が来なければ
+   * 自分で始める (ホストが落ちたとき用)。合言葉の部屋にはカウントダウンが無い。
    */
   function tickCountdown() {
-    if (!net || net.started || !deadline) return;
-    const left = (deadline - Date.now()) / 1000;
+    if (!net || net.started) return;
+    const dl = net.deadline;
+    countLabel.style.display = net.kind === 'open' ? '' : 'none';
+    countNum.style.display = net.kind === 'open' && dl ? '' : 'none';
+    if (!dl) { countLabel.textContent = t('lobby.waitingPeople'); return; }
+    countLabel.textContent = t('lobby.countLabel');
+    const left = (dl - Date.now()) / 1000;
     countNum.textContent = String(Math.max(0, Math.ceil(left)));
     countNum.classList.toggle('soon', left <= 5);
     if (left <= 0 && net.isHost) net.startRace();
     else if (left <= -2) net.startLocally();
   }
   setInterval(tickCountdown, 200);
+
+  // ---- 「対戦相手が来た」の通知 ----
+  // ロビーで待っているとき (別のタブを見ていることも多い) に相手が入ったら、短い
+  // ジングルを鳴らし、タブが裏ならタブの見出しを点滅させる。トップ画面にいるあいだに
+  // 待ち人が現れたときも同じように知らせる。音はページを一度でも触っていないと出せない
+  // (ブラウザの自動再生制限) ので、クリックやキー入力のたびに AudioContext を起こす。
+  document.addEventListener('pointerdown', () => audio.start());
+  const baseTitle = document.title;
+  let flashTimer = 0;
+  const stopFlash = () => { clearInterval(flashTimer); flashTimer = 0; document.title = baseTitle; };
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) stopFlash(); });
+  function notify(text: string) {
+    audio.opponent();
+    if (!document.hidden) return;
+    stopFlash();
+    let on = false;
+    flashTimer = window.setInterval(() => { on = !on; document.title = on ? `★ ${text}` : baseTitle; }, 800);
+  }
+  const lobbyToast = byId<HTMLDivElement>('lobbyToast');
+  let toastTimer = 0;
+  function showToast(text: string) {
+    lobbyToast.textContent = text;
+    lobbyToast.style.display = '';
+    clearTimeout(toastTimer);
+    toastTimer = window.setTimeout(() => { lobbyToast.style.display = 'none'; }, 4000);
+  }
+
+  /** 部屋を移る (合流、またはレース中の部屋に入ってしまったとき)。ロビー画面はそのまま */
+  function switchRoom(code: string) {
+    net?.leave();
+    net = null;
+    connect(code, 'open');
+  }
+  let lastMerge = 0;
+  /**
+   * 1 人で待っているとき、別の部屋で待っている人が見えたらそちらへ移る。
+   * お互いの presence が届く前に押すと部屋が 2 つできるので、その合流用。
+   * 2 人以上いる部屋か、部屋名の小さいほうへ移る。1 人どうしなら名前の大きい側だけが
+   * 動くので、両方が同時に移ってすれ違うことはない。
+   */
+  function maybeMergeLobby() {
+    if (!net || !presence || net.kind !== 'open' || net.started) return;
+    if (net.peerIds().length > 1) return;   // 誰かがつながりかけているなら動かない
+    if (Date.now() - lastMerge < 3000) return;
+    const mine = net.code;
+    const other = presence.joinable().find(r => r.code !== mine && (r.names.length >= 2 || r.code < mine));
+    if (!other) return;
+    lastMerge = Date.now();
+    switchRoom(other.code);
+  }
 
   // ---- トップ画面の「対戦待ち」表示 ----
   // presence (src/net.ts) で集めた状態を、対戦PLAY の下に出す。
@@ -397,25 +458,39 @@ async function main() {
   /** 誰ともつながっていない間は「確認中」。これを過ぎたら「いません」と言い切る */
   const PRESENCE_CHECK_MS = 25000;
   const presenceSince = Date.now();
+  let hadWaiting = false;
   function renderPresence() {
     if (!presence) { presenceBox.style.display = 'none'; return; }
     const now = Date.now();
     const s = presence.summary(now);
     const joinable = presence.joinable(now);
-    // 間に合う部屋があればそれ、無ければ一番早い部屋を「まもなく発走」として見せる
-    const target = joinable ?? s.waiting[0] ?? null;
+    // 入れる部屋があればそれ、無ければ一番人の多い部屋を「まもなく発走」として見せる
+    const target = joinable[0] ?? s.waiting[0] ?? null;
+    const canJoin = joinable.length > 0;
     const checking = s.others === 0 && now - presenceSince < PRESENCE_CHECK_MS;
     presenceBox.classList.toggle('live', !!target);
     presenceBox.classList.toggle('checking', !target && checking);
     const sub: string[] = [];
     if (target) {
-      const left = Math.max(0, Math.ceil((target.deadline - now) / 1000));
       const names = target.names.join(isJa ? '、' : ', ');
-      presenceMain.innerHTML = `<b>${esc(t('pres.waiting', target.names.length, names))}</b> ${esc(t('pres.startsIn', left))}`;
-      sub.push(joinable ? t('pres.joinNow') : t('pres.soon'));
+      const head = `<b>${esc(t('pres.waiting', target.names.length, names))}</b>`;
+      if (!target.deadline) {
+        // 1 人で相手を待っている。押せば 2 人になってカウントダウンが始まる
+        presenceMain.innerHTML = `${head} ${esc(t('pres.waitingPeople'))}`;
+        sub.push(t('pres.joinStart'));
+      } else {
+        const left = Math.max(0, Math.ceil((target.deadline - now) / 1000));
+        presenceMain.innerHTML = `${head} ${esc(t('pres.startsIn', left))}`;
+        sub.push(canJoin ? t('pres.joinNow') : t('pres.soon'));
+      }
     } else {
       presenceMain.textContent = checking ? t('pres.checking') : t('pres.none');
     }
+    // トップ画面にいるあいだに待ち人が現れたら音で知らせる
+    const anyWaiting = s.waiting.length > 0;
+    if (anyWaiting && !hadWaiting && !net && state === 'title') notify(t('pres.appeared'));
+    hadWaiting = anyWaiting;
+    maybeMergeLobby();
     if (s.title) sub.push(t('pres.title', s.title));
     if (s.racing) sub.push(t('pres.racing', s.racing));
     if (!sub.length && !checking) sub.push(t('pres.nobody'));
@@ -444,6 +519,12 @@ async function main() {
       setLabel(i, i === mySlot ? '' : id ? karts[i].def.name : `${DEFAULT_NAMES[i]} (AI)`);
     }
     renderLobby();
+    // 人が増えたら「対戦相手が来た」と知らせる (入った側にも「相手がいる」の合図になる)
+    const humans = info.order.length;
+    if (humans >= 2 && humans > lastHumans && !net.started) { notify(t('lobby.arrived')); showToast(t('lobby.arrived')); }
+    lastHumans = humans;
+    // 締切が決まった / 消えたのをトップ画面の人にも伝える
+    if (net.kind === 'open' && !net.started) presence?.set({ s: 'wait', name: myName, room: net.code, deadline: net.deadline });
   }
 
   function beginOnlineRace() {
@@ -508,28 +589,30 @@ async function main() {
     if (net) return;
     const name = (nameInput.value.trim() || t('lobby.anon')).slice(0, 10);
     localStorage.setItem('hk.name', name);
+    myName = name;
+    lastHumans = 0;
     try {
       net = new NetSession(code, name, kind, {
         onLobby: applyLobby, onStart: beginOnlineRace, onPose: applyPoses,
         onEvent: applyEvent, onPeers: renderLobby,
+        // レース中の部屋に入ってしまった。公開ロビーなら新しい部屋で待ち直す
+        onBusy: () => { if (net?.kind === 'open') switchRoom(newOpenCode()); else netNote2.textContent = t('net.busy'); },
       });
     } catch (e) {
       netNote2.textContent = t('net.failed', String(e));
       return;
     }
+    audio.start();   // ボタン操作のうちに起こしておき、相手が来たときの音を出せるようにする
     onlineHome.style.display = 'none';
     onlineRoom.style.display = 'block';
     mainButtons.style.display = 'none';
-    // 合言葉の部屋にはカウントダウンが無いので、表示を出しっぱなしにしない
-    countLabel.style.display = deadline ? '' : 'none';
-    countNum.style.display = deadline ? '' : 'none';
     renderLobby();
     tickCountdown();
     // トップ画面にいる人へ「対戦待ち」を知らせる。合言葉の部屋は公開しないので「レース中」扱い
-    presence?.set(kind === 'open' && deadline ? { s: 'wait', name, room: code, deadline } : { s: 'race' });
+    presence?.set(kind === 'open' ? { s: 'wait', name, room: code, deadline: 0 } : { s: 'race' });
     // 動作確認用 (tools/nettest.mjs が読む)
     (window as never as Record<string, unknown>).__net = () => ({
-      code, slot: mySlot, host: net?.isHost, started: net?.started, order: net?.order ?? [],
+      code, slot: mySlot, host: net?.isHost, started: net?.started, order: net?.order ?? [], deadline: net?.deadline ?? 0,
       labels: labels.filter(Boolean).length,
       karts: karts.map((k, i) => ({ i, name: k.def.name, x: Math.round(k.x), z: Math.round(k.z), lap: k.lap, fromNet: k.hasNet })),
     });
@@ -537,28 +620,24 @@ async function main() {
     setTimeout(() => net?.publishLobby(), 300);
   }
 
-  // 公開ロビー: 押すとすぐ入り、時計で決まる締切に発走する
+  // 公開ロビー: 待っている人が見えていればその部屋へ、いなければ新しい部屋を作って待つ。
+  // presence で接続は共有済みなので、待っている人の部屋には席の受け渡しだけで入れる。
   byId<HTMLButtonElement>('openBtn').onclick = () => {
     goLandscape();
-    // 対戦待ちの人が見えていて締切に間に合うなら、その部屋へ入る。presence で接続は
-    // 共有済みなので席の受け渡しだけで済み、OPEN_MIN_WAIT (12 秒) を待つ必要がない。
-    const waiting = presence?.joinable();
-    const room = waiting ? { code: waiting.code, deadline: waiting.deadline } : openRoom();
-    deadline = room.deadline;
-    connect(room.code, 'open');
+    const waiting = presence?.joinable()[0];
+    connect(waiting ? waiting.code : newOpenCode(), 'open');
   };
   goBtn.onclick = () => net?.startRace();
   byId<HTMLButtonElement>('leaveBtn').onclick = () => { net?.leave(); location.reload(); };
   // ?room=XXXXX のリンクなら合言葉の部屋へ直接入る (UI は隠してある)
-  if (linkRoom) { deadline = 0; connect(linkRoom, 'join'); }
+  if (linkRoom) connect(linkRoom, 'join');
 
   /* 合言葉で部屋を作る方式。公開ロビーに切り替えたので止めてあります。
      戻すときは index.html のボタンと合わせてコメントを外してください。
-  byId<HTMLButtonElement>('createBtn').onclick = () => { deadline = 0; connect(makeRoomCode(), 'create'); };
+  byId<HTMLButtonElement>('createBtn').onclick = () => connect(makeRoomCode(), 'create');
   byId<HTMLButtonElement>('joinBtn').onclick = () => {
     const code = normalizeRoomCode(roomInput.value);
     if (code.length < 4) { roomInput.focus(); return; }
-    deadline = 0;
     connect(code, 'join');
   };
   byId<HTMLButtonElement>('copyBtn').onclick = async () => {

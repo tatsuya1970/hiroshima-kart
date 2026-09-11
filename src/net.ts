@@ -16,7 +16,10 @@
 import { joinRoom, selfId } from 'trystero/nostr';
 import type { JsonValue, MessageAction, Room } from 'trystero/nostr';
 
-const APP_ID = 'hiroshima-kart';
+// 開発中 (localhost) は別の appId にして、本番の利用者と部屋や presence を共有しない。
+// 同じにしておくと、テスト用のブラウザが本番のトップ画面に「見ている人」として映り、
+// テストが本番の利用者の部屋に入ってしまうこともある (実際に起きた)。
+const APP_ID = /^(localhost|127\.0\.0\.1)$/.test(location.hostname) ? 'hiroshima-kart-dev' : 'hiroshima-kart';
 /** 作成者が誰か分かるまで、参加した側がホストを名乗らずに待つ時間 */
 const HOST_GRACE_MS = 5000;
 
@@ -54,6 +57,8 @@ export interface LobbyInfo {
   order: string[];
   names: Record<string, string>;
   seed: number;
+  /** 発走の締切 (ミリ秒)。公開ロビーで 2 人そろうとホストが決める。0 = まだ相手待ち */
+  deadline: number;
 }
 
 /** アイテムの使用・被弾など、位置以外の出来事 */
@@ -68,6 +73,8 @@ export interface NetHandlers {
   onPose(poses: Pose[]): void;
   onEvent(ev: NetEvent): void;
   onPeers(): void;
+  /** 入った部屋が既にレース中だった (席をもらえないので別の部屋へ) */
+  onBusy(): void;
 }
 
 /** あいことば: 紛らわしい文字 (0/O, 1/I) を除いた 5 文字 */
@@ -82,24 +89,23 @@ export function normalizeRoomCode(v: string): string {
   return v.trim().toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 5);
 }
 
-/** 公開ロビーの 1 枠の長さ (秒)。この境目でレースが始まる */
-export const OPEN_PERIOD = 30;
-/** これより締切が近い枠には入れず、次の枠へ回す (入った瞬間に発走しないように) */
-const OPEN_MIN_WAIT = 12;
+/**
+ * 公開ロビーのカウントダウン (秒)。2 人そろった時点でホストが締切を決めて配る。
+ * 1 人のあいだは締切が無く、相手が来るまで待つ (「すぐ始める」で AI と走ることはできる)。
+ */
+export const COUNTDOWN_SEC = 30;
 
 /**
- * 公開ロビーの部屋名と締切。
+ * 公開ロビーの部屋名。押した人が新しく作る。
  *
- * 壁時計を OPEN_PERIOD 秒ごとに区切り、同じ区間に来た人が同じ部屋に入る。
- * 部屋名が時刻から決まるので、遅れて来た人は自動的に次のレースの部屋へ回り、
- * 走っているレースに紛れ込まない。締切も全員が同じ計算で出せる。
+ * 同じ部屋に集まる手段は presence (下の Presence) で、待っている人の部屋が見えていれば
+ * そこへ入り、見えていなければ新しい部屋を作る。お互いに見えないまま部屋が 2 つできた
+ * ときは、1 人で待っている側が名前の小さいほうへ移って合流する (src/main.ts の maybeMergeLobby)。
+ * 以前は壁時計を 30 秒で区切った部屋名にしていたが、「2 人そろってからカウントダウン」
+ * にするには締切を人数で決める必要があり、時刻から決まる部屋名とは相容れない。
  */
-export function openRoom(now = Date.now()): { code: string; deadline: number } {
-  const sec = now / 1000;
-  let bucket = Math.floor(sec / OPEN_PERIOD);
-  let deadline = (bucket + 1) * OPEN_PERIOD;
-  if (deadline - sec < OPEN_MIN_WAIT) { bucket += 1; deadline += OPEN_PERIOD; }
-  return { code: `OPEN${bucket}`, deadline: deadline * 1000 };
+export function newOpenCode(): string {
+  return `OPEN${makeRoomCode()}`;
 }
 
 /** create=合言葉で部屋を作った / join=合言葉で参加した / open=公開ロビー */
@@ -117,16 +123,19 @@ export class NetSession {
   /** 部屋を作った人 (ホストはここから決める) */
   private creators: Record<string, boolean> = {};
   private joinedAt = Date.now();
-  private kind: RoomKind;
+  readonly kind: RoomKind;
   /** ホストが決めた座席順。ロビー受信まで空 */
   order: string[] = [];
   seed = 20240803;
+  /** 発走の締切 (ミリ秒)。公開ロビーで 2 人そろうと決まる。0 = 相手待ち (合言葉の部屋は常に 0) */
+  deadline = 0;
   started = false;
 
   // trystero 0.25 の makeAction は { send, onMessage } を返す
   private hi: MessageAction<JsonValue>;
   private lobby: MessageAction<JsonValue>;
   private go: MessageAction<JsonValue>;
+  private busy: MessageAction<JsonValue>;
   private pose: MessageAction<JsonValue>;
   private ev: MessageAction<JsonValue>;
 
@@ -144,6 +153,9 @@ export class NetSession {
         const msg = d as { name?: string; creator?: boolean };
         this.names[ctx.peerId] = String(msg?.name ?? '???').slice(0, 10);
         this.creators[ctx.peerId] = !!msg?.creator;
+        // レース中に来た人には席を用意できない。そう伝えて別の部屋へ行ってもらう
+        // (伝えないと、相手は誰も来ないロビーで待ち続ける)
+        if (this.started) { void this.busy.send({}, { target: ctx.peerId }); return; }
         handlers.onPeers();
         // 座席順を決めて配るのはホストだけ
         if (this.isHost) this.publishLobby();
@@ -156,11 +168,15 @@ export class NetSession {
         this.order = info.order;
         this.names = { ...this.names, ...info.names };
         this.seed = info.seed;
+        this.deadline = Number(info.deadline) || 0;
         handlers.onLobby(info);
       },
     });
     this.go = this.room.makeAction<JsonValue>('go', {
       onMessage: () => { if (!this.started) { this.started = true; handlers.onStart(); } },
+    });
+    this.busy = this.room.makeAction<JsonValue>('busy', {
+      onMessage: () => { if (!this.started && this.mySlot < 0) handlers.onBusy(); },
     });
     this.pose = this.room.makeAction<JsonValue>('pose', {
       onMessage: d => {
@@ -239,7 +255,13 @@ export class NetSession {
     const names: Record<string, string> = {};
     for (const id of this.order) names[id] = this.names[id] ?? '???';
     this.names = { ...this.names, ...names };
-    const info: LobbyInfo = { order: this.order, names, seed: this.seed };
+    // 公開ロビーは 2 人そろった時点でカウントダウンを始める。1 人に戻ったら止める
+    // (相手が抜けたのに 1 人で発走してしまわないように)。合言葉の部屋は開始ボタンで始める。
+    if (this.kind === 'open') {
+      if (this.order.length >= 2) { if (!this.deadline) this.deadline = Date.now() + COUNTDOWN_SEC * 1000; }
+      else this.deadline = 0;
+    }
+    const info: LobbyInfo = { order: this.order, names, seed: this.seed, deadline: this.deadline };
     void this.lobby.send(info as unknown as JsonValue);
     this.handlers.onLobby(info);
   }
@@ -282,7 +304,8 @@ export class NetSession {
 //
 // 対戦PLAY を押す前から、レースの部屋とは別の常設の部屋 (hk-presence) に全員が入り、
 // 「トップ画面にいる / 対戦待ち / レース中」を伝え合う。トップ画面はこれを見て
-// 「いま 2 人が対戦待ち (発走まで 18 秒)」のように出す。
+// 「いま 1 人が対戦待ち (相手を待っています)」「いま 2 人が対戦待ち (発走まで 18 秒)」
+// のように出す。対戦PLAY を押したときに入る部屋もここで決める (待っている人の部屋)。
 //
 // trystero 0.25 は同じ appId なら部屋をまたいで WebRTC 接続を共有する
 // (@trystero-p2p/core の SharedPeerManager)。ここでつながった相手とは、
@@ -293,13 +316,13 @@ export type PresenceState = 'title' | 'wait' | 'race';
 
 export interface PresenceInfo {
   s: PresenceState;
-  /** 対戦待ちのときだけ: 名前・部屋・締切 (ミリ秒) */
+  /** 対戦待ちのときだけ: 名前・部屋・締切 (ミリ秒, 0 = まだ相手待ちでカウントダウン前) */
   name?: string;
   room?: string;
   deadline?: number;
 }
 
-/** 対戦待ちの人がいる部屋 */
+/** 対戦待ちの人がいる部屋。deadline 0 = 相手待ち (カウントダウン前) */
 export interface WaitingRoom { code: string; deadline: number; names: string[] }
 
 export interface PresenceSummary {
@@ -307,14 +330,13 @@ export interface PresenceSummary {
   others: number;
   title: number;
   racing: number;
-  /** 締切の早い順 */
+  /** 人数の多い順、同数なら部屋名順 (合流先の優先順) */
   waiting: WaitingRoom[];
 }
 
 /**
- * 対戦待ちの部屋へ途中から入るのに要る最低の残り秒数。
+ * カウントダウン中の部屋へ途中から入るのに要る最低の残り秒数。
  * 接続は presence で共有済みなので、残るのは席の受け渡し (数百ミリ秒) だけ。
- * OPEN_MIN_WAIT (12 秒) は接続に時間がかかる前提の値で、ここには当てはまらない。
  */
 export const JOIN_MIN_WAIT = 3;
 
@@ -360,22 +382,24 @@ export class Presence {
     for (const id of Object.keys(this.room.getPeers())) {
       const p = this.peers[id] ?? { s: 'title' };
       others++;
-      if (p.s === 'wait' && p.room && p.deadline && p.deadline > now) {
-        const r = rooms[p.room] ??= { code: p.room, deadline: p.deadline, names: [] };
+      if (p.s === 'wait' && p.room && (!p.deadline || p.deadline > now)) {
+        const r = rooms[p.room] ??= { code: p.room, deadline: p.deadline ?? 0, names: [] };
         r.names.push(p.name || '???');
+        // 同じ部屋の人から違う締切が届いたら、決まっているほうを採る
+        if (p.deadline && !r.deadline) r.deadline = p.deadline;
       } else if (p.s === 'wait' || p.s === 'race') {
         racing++;   // 締切を過ぎた「対戦待ち」は走り出している
       } else {
         title++;
       }
     }
-    const waiting = Object.values(rooms).sort((a, b) => a.deadline - b.deadline);
+    const waiting = Object.values(rooms).sort((a, b) => b.names.length - a.names.length || (a.code < b.code ? -1 : 1));
     return { others, title, racing, waiting };
   }
 
-  /** いま押せば間に合う対戦待ちの部屋 (締切が JOIN_MIN_WAIT 秒以上先のうち最も早いもの) */
-  joinable(now = Date.now()): WaitingRoom | null {
-    return this.summary(now).waiting.find(r => r.deadline - now >= JOIN_MIN_WAIT * 1000) ?? null;
+  /** いま押せば入れる対戦待ちの部屋 (相手待ち、またはカウントダウンが JOIN_MIN_WAIT 秒以上残っている)。合流先の優先順 */
+  joinable(now = Date.now()): WaitingRoom[] {
+    return this.summary(now).waiting.filter(r => !r.deadline || r.deadline - now >= JOIN_MIN_WAIT * 1000);
   }
 
   leave(): void {
