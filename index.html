@@ -76,6 +76,15 @@
     #playerList .dot { width: 14px; height: 14px; border-radius: 50%; flex: none; }
     #playerList .tag { margin-left: auto; font-size: 12px; opacity: .7; }
     #netNote { margin-top: 10px; font-size: 13px; opacity: .75; line-height: 1.7; }
+    /* 対戦待ちの状況 (presence)。誰か待っていれば緑に光る */
+    #presence { margin: 12px auto 0; padding: 9px 16px; border-radius: 12px; background: rgba(255,255,255,.08); border: 1px solid rgba(255,255,255,.18); font-size: 15px; line-height: 1.6; }
+    #presence .pdot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; background: #8f979f; margin-right: 8px; vertical-align: middle; }
+    #presence.checking .pdot { animation: pulse 1.2s infinite; }
+    #presence.live { border-color: rgba(88,220,120,.7); background: rgba(40,160,80,.2); }
+    #presence.live .pdot { background: #58dc78; box-shadow: 0 0 8px #58dc78; animation: pulse 1.2s infinite; }
+    #presence b { color: #ffd83d; }
+    #presenceSub { font-size: 13px; opacity: .7; }
+    @keyframes pulse { 50% { opacity: .35; } }
     #results { display: none; }
     #results table { margin: 0 auto 20px; border-collapse: collapse; font-size: 20px; }
     #results td { padding: 6px 18px; }
@@ -171,6 +180,7 @@
       <div id="onlineHome">
         <div class="row"><label for="playerName" data-en="Your name">対戦での なまえ</label> <input id="playerName" maxlength="10" placeholder="なまえ" data-en-placeholder="name" /></div>
         <div id="netNote" data-en-html="<b>ONLINE PLAY</b> drops you straight into a lobby that <b>starts in 30 seconds</b>. Race whoever shows up, up to 8 players. Empty seats are filled by AI. Browser-to-browser connection, no server."><b>対戦PLAY</b> は押すとすぐロビーに入り、<b>30 秒で発走</b>します。集まった人どうしで、最大 8 人。空いた枠は AI が走ります。通信はブラウザ同士の直接接続です（サーバーはありません）。</div>
+        <div id="presence" class="checking"><span class="pdot"></span><span id="presenceMain" data-en="Checking whether anyone is waiting...">対戦待ちの人がいるか確認しています...</span><div id="presenceSub"></div></div>
         <!--
           合言葉で部屋を作る方式は、公開ロビーに切り替えたので隠してあります。
           同時に遊ぶ人が少ないうちは、待ち時間が読めるほうが遊びやすいためです。
@@ -188,6 +198,7 @@
         <ul id="playerList"></ul>
         <div class="row"><button id="goBtn" disabled data-en="Start now">すぐ始める</button> <button id="leaveBtn" data-en="Leave">やめる</button></div>
         <div id="netNote2" class="row" style="margin-top:10px;font-size:13px;opacity:.75"></div>
+        <div id="presence2" class="row" style="margin-top:4px;font-size:13px;opacity:.75"></div>
         <!-- 合言葉の表示 (公開ロビーでは使いません)
         <div class="row">あいことば <span id="roomCode"></span> <button id="copyBtn">リンクをコピー</button></div>
         -->

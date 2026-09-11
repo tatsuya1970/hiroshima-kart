@@ -5,7 +5,7 @@ import { Track } from './track';
 import { buildBuildings, type BuildingsData } from './buildings';
 import { Kart, type RacerDef, type ItemType } from './kart';
 import { ItemSystem } from './items';
-import { NetSession, openRoom, normalizeRoomCode, type LobbyInfo, type NetEvent, type Pose, type RoomKind } from './net';
+import { NetSession, Presence, openRoom, normalizeRoomCode, type LobbyInfo, type NetEvent, type Pose, type RoomKind } from './net';
 import { Hud, drawCourseMap } from './hud';
 import { InputManager } from './input';
 import { AudioSystem } from './audio';
@@ -99,6 +99,12 @@ async function main() {
   console.log(`画質: ${quality.level} (アトラス ${quality.halfAtlas ? '2048' : '4096'}px / 影 ${quality.shadows ? 'on' : 'off'})`);
   setupQualityButtons(quality.level);
   setupLangButton();
+  // トップ画面の「対戦待ち」表示。相手とつながるまで 8〜19 秒かかるので、
+  // 読み込みの裏で先に探し始める (?debug=1 はロビーを通らないので入らない)
+  let presence: Presence | null = null;
+  if (!dbg.get('debug')) {
+    try { presence = new Presence(); } catch (e) { console.warn('対戦待ちの確認に入れませんでした', e); }
+  }
   // 低画質では MSAA も切る (内蔵 GPU では帯域を食う)
   const renderer = new THREE.WebGLRenderer({ canvas, antialias: quality.level !== 'low', powerPreference: 'high-performance' });
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, quality.maxPixelRatio));
@@ -291,6 +297,7 @@ async function main() {
     startBtn.textContent = t('btn.again');
     startBtn.disabled = false;
     startBtn.onclick = () => location.reload();
+    presence?.set({ s: 'title' });   // レースは終わったので「見ている人」に戻す
   }
   const fmt = (t: number) => { const m = Math.floor(t / 60); return `${m}:${(t - m * 60).toFixed(2).padStart(5, '0')}`; };
 
@@ -300,6 +307,7 @@ async function main() {
   openBtn.textContent = t('btn.online');
   startBtn.onclick = () => {
     goLandscape();
+    presence?.set({ s: 'race' });
     overlay.style.display = 'none';
     audio.start();
     state = 'countdown'; countdown = 3.999;
@@ -379,6 +387,51 @@ async function main() {
   }
   setInterval(tickCountdown, 200);
 
+  // ---- トップ画面の「対戦待ち」表示 ----
+  // presence (src/net.ts) で集めた状態を、対戦PLAY の下に出す。
+  // 誰かが待っていれば「いま 1 人が対戦待ち (名前) 発走まで N 秒」と緑で光らせる。
+  const presenceBox = byId<HTMLDivElement>('presence');
+  const presenceMain = byId<HTMLSpanElement>('presenceMain');
+  const presenceSub = byId<HTMLDivElement>('presenceSub');
+  const presence2 = byId<HTMLDivElement>('presence2');
+  /** 誰ともつながっていない間は「確認中」。これを過ぎたら「いません」と言い切る */
+  const PRESENCE_CHECK_MS = 25000;
+  const presenceSince = Date.now();
+  function renderPresence() {
+    if (!presence) { presenceBox.style.display = 'none'; return; }
+    const now = Date.now();
+    const s = presence.summary(now);
+    const joinable = presence.joinable(now);
+    // 間に合う部屋があればそれ、無ければ一番早い部屋を「まもなく発走」として見せる
+    const target = joinable ?? s.waiting[0] ?? null;
+    const checking = s.others === 0 && now - presenceSince < PRESENCE_CHECK_MS;
+    presenceBox.classList.toggle('live', !!target);
+    presenceBox.classList.toggle('checking', !target && checking);
+    const sub: string[] = [];
+    if (target) {
+      const left = Math.max(0, Math.ceil((target.deadline - now) / 1000));
+      const names = target.names.join(isJa ? '、' : ', ');
+      presenceMain.innerHTML = `<b>${esc(t('pres.waiting', target.names.length, names))}</b> ${esc(t('pres.startsIn', left))}`;
+      sub.push(joinable ? t('pres.joinNow') : t('pres.soon'));
+    } else {
+      presenceMain.textContent = checking ? t('pres.checking') : t('pres.none');
+    }
+    if (s.title) sub.push(t('pres.title', s.title));
+    if (s.racing) sub.push(t('pres.racing', s.racing));
+    if (!sub.length && !checking) sub.push(t('pres.nobody'));
+    presenceSub.textContent = sub.join(' / ');
+    // ロビー側: 待っている人にも、来そうな人がいるか見せる
+    const sub2: string[] = [];
+    if (s.title) sub2.push(t('pres.lobbyTitle', s.title));
+    if (s.racing) sub2.push(t('pres.racing', s.racing));
+    presence2.textContent = sub2.join(' / ');
+  }
+  if (presence) presence.onChange = renderPresence;
+  renderPresence();
+  setInterval(renderPresence, 500);
+  // 動作確認用 (tools/presencetest.mjs が読む)
+  (window as never as Record<string, unknown>).__presence = () => presence?.summary() ?? null;
+
   function applyLobby(info: LobbyInfo) {
     if (!net) return;
     mySlot = Math.max(0, net.mySlot);
@@ -395,6 +448,7 @@ async function main() {
 
   function beginOnlineRace() {
     if (!net) return;
+    presence?.set({ s: 'race' });
     // 席が決まる前に発走したら (相手との接続が間に合わなかった) オンラインは
     // あきらめて 1 人で走る。席が無いまま 0 番を名乗ると、ホストとカートを
     // 奪い合ってしまう。
@@ -452,7 +506,7 @@ async function main() {
 
   function connect(code: string, kind: RoomKind) {
     if (net) return;
-    const name = (nameInput.value.trim() || 'プレイヤー').slice(0, 10);
+    const name = (nameInput.value.trim() || t('lobby.anon')).slice(0, 10);
     localStorage.setItem('hk.name', name);
     try {
       net = new NetSession(code, name, kind, {
@@ -471,6 +525,8 @@ async function main() {
     countNum.style.display = deadline ? '' : 'none';
     renderLobby();
     tickCountdown();
+    // トップ画面にいる人へ「対戦待ち」を知らせる。合言葉の部屋は公開しないので「レース中」扱い
+    presence?.set(kind === 'open' && deadline ? { s: 'wait', name, room: code, deadline } : { s: 'race' });
     // 動作確認用 (tools/nettest.mjs が読む)
     (window as never as Record<string, unknown>).__net = () => ({
       code, slot: mySlot, host: net?.isHost, started: net?.started, order: net?.order ?? [],
@@ -484,7 +540,10 @@ async function main() {
   // 公開ロビー: 押すとすぐ入り、時計で決まる締切に発走する
   byId<HTMLButtonElement>('openBtn').onclick = () => {
     goLandscape();
-    const room = openRoom();
+    // 対戦待ちの人が見えていて締切に間に合うなら、その部屋へ入る。presence で接続は
+    // 共有済みなので席の受け渡しだけで済み、OPEN_MIN_WAIT (12 秒) を待つ必要がない。
+    const waiting = presence?.joinable();
+    const room = waiting ? { code: waiting.code, deadline: waiting.deadline } : openRoom();
     deadline = room.deadline;
     connect(room.code, 'open');
   };

@@ -277,3 +277,108 @@ export class NetSession {
     void this.room.leave().catch(() => { /* 切断済み */ });
   }
 }
+
+// ---- トップ画面の「対戦待ち」表示 (presence) ----
+//
+// 対戦PLAY を押す前から、レースの部屋とは別の常設の部屋 (hk-presence) に全員が入り、
+// 「トップ画面にいる / 対戦待ち / レース中」を伝え合う。トップ画面はこれを見て
+// 「いま 2 人が対戦待ち (発走まで 18 秒)」のように出す。
+//
+// trystero 0.25 は同じ appId なら部屋をまたいで WebRTC 接続を共有する
+// (@trystero-p2p/core の SharedPeerManager)。ここでつながった相手とは、
+// 対戦PLAY を押した瞬間にリレーの往復なしで同じ部屋に入れるので、
+// 相手とつながるまでの 8〜19 秒をページの読み込み中に済ませておく意味もある。
+
+export type PresenceState = 'title' | 'wait' | 'race';
+
+export interface PresenceInfo {
+  s: PresenceState;
+  /** 対戦待ちのときだけ: 名前・部屋・締切 (ミリ秒) */
+  name?: string;
+  room?: string;
+  deadline?: number;
+}
+
+/** 対戦待ちの人がいる部屋 */
+export interface WaitingRoom { code: string; deadline: number; names: string[] }
+
+export interface PresenceSummary {
+  /** 自分以外でつながっている人数 (0 ならまだ誰ともつながっていないか、本当に誰もいない) */
+  others: number;
+  title: number;
+  racing: number;
+  /** 締切の早い順 */
+  waiting: WaitingRoom[];
+}
+
+/**
+ * 対戦待ちの部屋へ途中から入るのに要る最低の残り秒数。
+ * 接続は presence で共有済みなので、残るのは席の受け渡し (数百ミリ秒) だけ。
+ * OPEN_MIN_WAIT (12 秒) は接続に時間がかかる前提の値で、ここには当てはまらない。
+ */
+export const JOIN_MIN_WAIT = 3;
+
+export class Presence {
+  private room: Room;
+  private peers: Record<string, PresenceInfo> = {};
+  private me: PresenceInfo = { s: 'title' };
+  private st: MessageAction<JsonValue>;
+  /** 誰かの状態が変わった (表示の更新用) */
+  onChange: (() => void) | null = null;
+
+  constructor() {
+    this.room = joinRoom({ appId: APP_ID }, 'hk-presence');
+    this.st = this.room.makeAction<JsonValue>('st', {
+      onMessage: (d, ctx) => {
+        const m = d as { s?: string; name?: string; room?: string; deadline?: number } | null;
+        const s: PresenceState = m?.s === 'wait' || m?.s === 'race' ? m.s : 'title';
+        this.peers[ctx.peerId] = s === 'wait'
+          ? { s, name: String(m?.name ?? '').slice(0, 10), room: String(m?.room ?? ''), deadline: Number(m?.deadline) || 0 }
+          : { s };
+        this.onChange?.();
+      },
+    });
+    this.room.onPeerJoin = peer => {
+      // 状態が届くまでは「トップ画面にいる」扱い
+      this.peers[peer] ??= { s: 'title' };
+      void this.st.send(this.me as unknown as JsonValue, { target: peer });
+      this.onChange?.();
+    };
+    this.room.onPeerLeave = peer => { delete this.peers[peer]; this.onChange?.(); };
+  }
+
+  /** 自分の状態を全員へ知らせる */
+  set(info: PresenceInfo): void {
+    this.me = info;
+    void this.st.send(info as unknown as JsonValue);
+    this.onChange?.();
+  }
+
+  summary(now = Date.now()): PresenceSummary {
+    const rooms: Record<string, WaitingRoom> = {};
+    let title = 0, racing = 0, others = 0;
+    for (const id of Object.keys(this.room.getPeers())) {
+      const p = this.peers[id] ?? { s: 'title' };
+      others++;
+      if (p.s === 'wait' && p.room && p.deadline && p.deadline > now) {
+        const r = rooms[p.room] ??= { code: p.room, deadline: p.deadline, names: [] };
+        r.names.push(p.name || '???');
+      } else if (p.s === 'wait' || p.s === 'race') {
+        racing++;   // 締切を過ぎた「対戦待ち」は走り出している
+      } else {
+        title++;
+      }
+    }
+    const waiting = Object.values(rooms).sort((a, b) => a.deadline - b.deadline);
+    return { others, title, racing, waiting };
+  }
+
+  /** いま押せば間に合う対戦待ちの部屋 (締切が JOIN_MIN_WAIT 秒以上先のうち最も早いもの) */
+  joinable(now = Date.now()): WaitingRoom | null {
+    return this.summary(now).waiting.find(r => r.deadline - now >= JOIN_MIN_WAIT * 1000) ?? null;
+  }
+
+  leave(): void {
+    void this.room.leave().catch(() => { /* 切断済み */ });
+  }
+}
