@@ -80,13 +80,16 @@ PLATEAU の LOD2 は 1 棟につき 1 枚のテクスチャ画像（512〜2048px
 
 **なぜ URL を分けるのか。** X や Facebook のカードを作るクローラは JavaScript を実行しません。1 つの URL で実行時に英語へ差し替えても、共有カードは日本語のままになります。検索も、1 つの URL に 2 言語が同居していると、どちらの言語のページとして出すか決めきれません。
 
-**英語ページの作り方。** ページを二重管理しないよう、`index.html` は 1 つだけです。head の言語依存部分を `<!-- ==== SEO:ja ==== -->` と `<!-- ==== /SEO:ja ==== -->` で囲んであり、ビルド後に `tools/build_en_page.mjs` がそこを `tools/seo-en.html` の中身へ差し替え、`<html lang>` を `en` にして `dist/en/index.html` として書き出します（`npm run build` に組み込み済み）。**目印のコメントを消さないでください。** 画面の文言は `applyDomLang()` が `/en/` を見て英語にします。
+**英語ページの作り方。** ページを二重管理しないよう、`index.html` は 1 つだけです。head の言語依存部分を `<!-- ==== SEO:ja ==== -->` と `<!-- ==== /SEO:ja ==== -->` で囲んであり、ビルド後に `tools/build_en_page.mjs` がそこを `tools/seo-en.html` の中身へ差し替え、`<html lang>` を `en` にして `dist/en/index.html` として書き出します（`npm run build` に組み込み済み）。**目印のコメントを消さないでください。** 画面の文言は `applyDomLang()` が `/en/` を見て英語にします。ただし子要素を持たない `data-en` の要素（h2 の見出しなど）は、JavaScript を実行しないクローラにも読めるよう、このスクリプトが英語ページに英語で書き出します。
+
+**紹介文（本文）。** 検索の順位に効くのは meta description ではなく本文です。トップ画面の下に `<section id="about">` があり、日本語を `ABOUT:ja`、英語を `ABOUT:en` の目印コメントで囲んで両方置いてあります。ビルド後に `tools/build_en_page.mjs` が `dist/index.html` から英語を、`dist/en/index.html` から日本語を取り除きます。開発サーバーでは両方が残るので、`<html lang>` を見て CSS で出し分けます。コースや遊び方を変えたら、ここも直してください。
 
 入れてあるもの。
 
 | 項目 | 場所 |
 | --- | --- |
 | 見出しと説明（言語別） | `index.html` の SEO ブロック / `tools/seo-en.html` |
+| 紹介文（本文、言語別） | `index.html` の `#about`（ABOUT ブロック） |
 | canonical と hreflang（ja / en / x-default） | 同上。各ページが自分を canonical に指す |
 | OGP と Twitter カード（`summary_large_image`） | 同上 |
 | 構造化データ（schema.org の `VideoGame`） | 同上。JSON-LD |
@@ -346,7 +349,7 @@ tools/airace.mjs           全 AI による高速レース検証
 tools/nettest.mjs          オンライン対戦の疎通確認 (ブラウザ 2 つ)
 tools/presencetest.mjs     トップ画面の「対戦待ち」表示と、待っている人の部屋へ即座に入れるかの確認
 tools/make_ogp.mjs         SNS のカード画像 (1200x630, 日本語 / 英語) を作る
-tools/build_en_page.mjs    ビルド後に英語版 dist/en/index.html を書き出す (head だけ差し替え)
+tools/build_en_page.mjs    ビルド後に言語別のページを仕上げる (head と紹介文を差し替え)
 tools/probe_scene.mjs      画面前方の物体をレイキャストで特定
 tools/probe_uv.mjs         UV とアトラス参照先の特定
 tools/check_trains.mjs     車両が走行しているかの確認

@@ -89,6 +89,10 @@
     /* 絶対配置だと行数が増えたときに .keys と重なるので通常フローに置く */
     #overlay .credit { margin-top: 22px; font-size: 12px; opacity: .6; max-width: 900px; line-height: 1.7; }
     #overlay .credit a { color: inherit; text-decoration: underline; }
+    #about { margin-top: 26px; max-width: 640px; text-align: left; font-size: 13px; line-height: 1.8; opacity: .72; }
+    #about h3 { font-size: 14px; margin: 14px 0 2px; color: #ffd83d; }
+    #about p { margin: 0; }
+    html[lang="en"] #about .about-ja, html:not([lang="en"]) #about .about-en { display: none; }
     /* ビルドの識別 (古いページが残っていないかを見分ける) */
     #buildInfo { margin-top: 8px; font-size: 11px; opacity: .45; font-variant-numeric: tabular-nums; }
     #progress { width: 360px; height: 8px; background: rgba(255,255,255,.2); border-radius: 4px; margin-top: 18px; overflow: hidden; }
@@ -266,6 +270,31 @@
     </div>
     <div class="keys" data-en-html="↑/W: accelerate　↓/S: brake and reverse　←→/A D: steer<br />Shift/Space: drift (release for a mini-turbo)　Ctrl/Enter: use item　C: camera　M: sound">↑/W: アクセル　↓/S: ブレーキ・バック　←→/A D: ハンドル<br />Shift/Space: ドリフト（離してミニターボ）　Ctrl/Enter: アイテム使用　C: カメラ切替　M: 音</div>
     <div class="keys touchKeys" data-en-html="◀ ▶: steer　D: drift (release for a mini-turbo)　★: use item　▼: brake and reverse<br />The kart accelerates by itself. You can slide your thumb between buttons.">◀ ▶: ハンドル　D: ドリフト（離してミニターボ）　★: アイテム使用　▼: ブレーキ・バック<br />アクセルは自動です。指を置いたまま隣のボタンへ滑らせても効きます</div>
+    <!-- 紹介文。検索エンジンが読む本文 (meta description は順位に効かない)。
+         日英を両方置き、ビルド後に tools/build_en_page.mjs が各ページから他方の言語を
+         取り除く。開発サーバーでは CSS で出し分ける。目印コメントは消さないこと。 -->
+    <section id="about">
+      <!-- ==== ABOUT:ja ==== -->
+      <div class="about-ja" lang="ja">
+        <h3>広島グランプリ（Hiroshima Kart）とは</h3>
+        <p>実在の広島市の街並みを走る、無料のブラウザカートレースゲームです。国土交通省の Project PLATEAU（プラトー）が公開している3D都市モデルから、建物・道路・地形を起こしています。インストールや登録は不要で、パソコンでもスマホ（iPhone / Android）でも遊べます。</p>
+        <h3>コース</h3>
+        <p>1周7.31km、2周で勝負します。広島駅をスタートし、銀山町・八丁堀・紙屋町を抜けて原爆ドーム前へ。十日市・寺町を回り、サッカースタジアムのエディオンピースウィング広島の前を通って、白島・二葉の里から広島駅北口へ戻ります。道の中央には広島電鉄（広電）の路面電車が走り、JR山陽本線と山陽新幹線も実際の位置を走ります。沿道には原爆ドーム、広島城、平和記念公園の緑があります。</p>
+        <h3>遊び方</h3>
+        <p>「1人PLAY」ではAIのカートと走ります。「対戦PLAY」はオンライン対戦で、最大8人が同じレースを走れます（空いた枠はAIが走ります）。アイテムとドリフトのミニターボを使って順位を上げてください。</p>
+      </div>
+      <!-- ==== /ABOUT:ja ==== -->
+      <!-- ==== ABOUT:en ==== -->
+      <div class="about-en" lang="en">
+        <h3>What is Hiroshima Kart?</h3>
+        <p>Hiroshima Kart (Hiroshima Grand Prix) is a free kart racing game that runs in your browser and takes you through the real streets of Hiroshima, Japan. Buildings, roads and terrain come from the 3D city model published by Project PLATEAU, Japan's Ministry of Land, Infrastructure, Transport and Tourism (MLIT). No install or sign-up — it plays on PCs and on phones (iPhone and Android).</p>
+        <h3>The course</h3>
+        <p>7.31 km a lap, two laps a race. You start at Hiroshima Station and run through Kanayama-cho, Hatchobori and Kamiya-cho to the A-Bomb Dome, loop past Tokaichi and Tera-machi, go by the EDION Peace Wing Hiroshima football stadium, and return through Hakushima and Futaba-no-sato to the north side of the station. Hiroden streetcars run down the middle of the road, and the JR Sanyo Line and Sanyo Shinkansen run on their real tracks. Along the way you pass the A-Bomb Dome, Hiroshima Castle and the trees of Peace Memorial Park.</p>
+        <h3>How to play</h3>
+        <p>SOLO PLAY races you against AI karts. ONLINE PLAY is online multiplayer for up to 8 players in the same race, with AI filling any empty seats. Use items and drift mini-turbos to move up the order.</p>
+      </div>
+      <!-- ==== /ABOUT:en ==== -->
+    </section>
     <div class="credit" data-en-html='3D city model: MLIT Project PLATEAU, "3D City Model (Project PLATEAU) Hiroshima City (FY2024)", adapted (<a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noopener">CC BY 4.0</a>) — buildings LOD2 (aerial-photo textures) and LOD1, roads, terrain<br />Hiroden trams, the JR Sanyo Line and the Sanyo Shinkansen run on their real alignments<br /><span style="opacity:.7">Not affiliated with Nintendo</span>'>3D都市モデル: 国土交通省 PLATEAU「3D都市モデル（Project PLATEAU）広島市（2024年度）」を加工して作成 (<a href="https://creativecommons.org/licenses/by/4.0/deed.ja" target="_blank" rel="noopener">CC BY 4.0</a>) / 建築物 LOD2 (実写テクスチャ)・LOD1・道路・地形を使用<br />広島電鉄・JR山陽本線・山陽新幹線は実在の位置に敷設し、車両が走行します<br /><span style="opacity:.7">本作品は任天堂株式会社とは関係がありません</span></div>
     <div id="buildInfo"></div>
   </div>
