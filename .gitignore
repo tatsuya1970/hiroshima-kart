@@ -5,3 +5,7 @@ data/citygml
 data/shots*
 data/dem_probe.txt
 data/lod2tex
+
+# プロモ動画の素材 (videos/)。連番 PNG と書き出しは重いので入れない。
+# 作り直しは: node tools/record_promo.mjs → node tools/clips_to_mp4.mjs videos/assets
+videos/

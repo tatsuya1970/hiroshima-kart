@@ -327,6 +327,18 @@ http://localhost:5180/?debug=1&photo=34.39564,132.45362,14,75,200  # 指定し�
 
 `cam` は 0: 追従, 1: 遠め, 2: ボンネット, 3: 俯瞰。`tools/shots.mjs` と `tools/airace.mjs` は Playwright (SwiftShader) でこれらを自動実行します。
 
+### プロモ動画の素材撮り
+
+`?rec=1` で実時間に依存しない録画モードになり、`window.__recStep(n)` を呼ぶたびに 1/30 秒ずつ n コマ進みます（福山版・松江版と同じ仕組み）。描画が数 fps しか出ない SwiftShader でも、コマごとに撮るので滑らかな映像になります。`nohud=1` で HUD を隠し、`photo=...` に `orbit=<度/秒>` を付けると撮影カメラが周回します。`ahead=1` はライバルをプレイヤーの前に並べます。
+
+```bash
+PORT=5180 node tools/record_promo.mjs        # videos/clips/<名前>/ に連番 PNG
+node tools/clips_to_mp4.mjs videos/assets    # videos/assets/<名前>.mp4
+node tools/_probe_idx.mjs 1000 300 1168      # idx 1000 から始めて 1168 に届くコマ数を測る
+```
+
+撮るクリップと開始地点は `tools/record_promo.mjs` にあります。`videos/` は git に入れていません。
+
 ## 構成
 
 ```

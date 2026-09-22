@@ -288,7 +288,9 @@ async function main() {
     state = 'finish';
     audio.finish();
     hud.showCenter(t('race.finish'), 3);
-    setTimeout(showResults, 2500);
+    // 素材撮り (?rec=1) ではリザルト画面を出さない。実時間のタイマーなので、
+    // 1 コマずつ撮っている間に 2.5 秒が過ぎてゴール直後の画がふさがれてしまう。
+    if (!recMode) setTimeout(showResults, 2500);
   }
   function showResults() {
     const sorted = [...karts].sort((a, b) => (a.finished && b.finished) ? a.finishTime - b.finishTime : a.finished ? -1 : b.finished ? 1 : b.progress - a.progress);
@@ -697,7 +699,9 @@ async function main() {
     const f0 = new THREE.Vector3(Math.cos(player.heading), 0, Math.sin(player.heading));
     camPos.set(player.x - f0.x * 7.5, player.y + 3.2, player.z - f0.z * 7.5);
     camLook.set(player.x + f0.x * 6, player.y + 1.2, player.z + f0.z * 6);
-    karts.forEach((k, i) => { if (i > 0) k.placeAt(track, idx - 3 - 6 * i, (i % 2 ? 3.5 : -3.5)); });
+    // ?ahead=1 でライバルをプレイヤーの前に並べる (撮影用)
+    const ahead = params.get('ahead') === '1';
+    karts.forEach((k, i) => { if (i > 0) k.placeAt(track, ahead ? idx + 4 * i : idx - 3 - 6 * i, (i % 2 ? 3.5 : -3.5)); });
     camMode = Number(params.get('cam') ?? 0);
     state = 'race';
     (window as any).__debug = { track, karts, terrain, scene, camera, rail, THREE };
@@ -723,11 +727,25 @@ async function main() {
   /** 前回位置を送った時刻 (performance.now) */
   let poseTimer = 0;
   const idleInput = { throttle: 0, brake: 0, steer: 0, drift: false, item: false, lookBack: false };
+  // 録画 (プロモ動画の素材撮り): ?rec=1 で実時間に依存せず 1/30 秒ずつ進める。
+  // 描画が遅い環境でも滑らかな映像になるよう、外から window.__recStep(n) で n コマ進めてから撮る。
+  // ?nohud=1 で HUD を隠す。?photo=... に &orbit=<度/秒> を付けると撮影カメラが周回する。
+  const recMode = params.get('rec') === '1';
+  let recTime = 0;
+  if (params.get('nohud')) { document.getElementById('hud')!.style.display = 'none'; document.getElementById('touch')!.style.display = 'none'; }
+  if (recMode) {
+    (window as any).__recStep = (n: number) => {
+      for (let i = 0; i < n; i++) { recTime += 1 / 30; last += 1000 / 30; step(1 / 30, last); }
+    };
+  }
   function frame(now: number) {
     requestAnimationFrame(frame);
-    const dtRaw = Math.min(0.05, (now - last) / 1000);
+    if (recMode) return;
+    const dt = Math.min(0.05, (now - last) / 1000);
     last = now;
-    const dt = dtRaw;
+    step(dt, now);
+  }
+  function step(dt: number, now: number) {
     fpsFrames++;
     if (now - fpsSince >= 500) {
       const fps = Math.round(fpsFrames * 1000 / (now - fpsSince));
@@ -850,13 +868,14 @@ async function main() {
   // デバッグ用の撮影カメラ: ?photo=<lat>,<lon>,<注視高さ>,<距離>,<方位角deg>
   const photoArg = params.get('photo');
   const photo = photoArg ? photoArg.split(',').map(Number) : null;
+  const orbitSpeed = Number(params.get('orbit') ?? 0);
 
   function updateCamera(dt: number, lookBack: boolean) {
     const fx = Math.cos(player.heading), fz = Math.sin(player.heading);
     if (photo) {
       const [plat, plon, ph = 12, pd = 70, paz = 180] = photo;
       const [tx, tz] = llToXZ(plat, plon);
-      const a = (paz * Math.PI) / 180;
+      const a = ((paz + orbitSpeed * recTime) * Math.PI) / 180;
       camera.position.set(tx + Math.sin(a) * pd, terrain.groundHeight(tx, tz) + ph + pd * 0.35, tz + Math.cos(a) * pd);
       camera.lookAt(tx, terrain.groundHeight(tx, tz) + ph, tz);
       camera.fov = 55; camera.updateProjectionMatrix();
