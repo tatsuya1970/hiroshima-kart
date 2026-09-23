@@ -75,8 +75,8 @@ PLATEAU の LOD2 は 1 棟につき 1 枚のテクスチャ画像（512〜2048px
 
 | URL | 言語 | 中身 |
 | --- | --- | --- |
-| `https://tatsuya1970.github.io/hiroshima-kart/` | 日本語 | `dist/index.html` |
-| `https://tatsuya1970.github.io/hiroshima-kart/en/` | 英語 | `dist/en/index.html`（中身は同じで head だけ英語） |
+| `https://hiroshima.citykart.jp/` | 日本語 | `dist/index.html` |
+| `https://hiroshima.citykart.jp/en/` | 英語 | `dist/en/index.html`（中身は同じで head だけ英語） |
 
 **なぜ URL を分けるのか。** X や Facebook のカードを作るクローラは JavaScript を実行しません。1 つの URL で実行時に英語へ差し替えても、共有カードは日本語のままになります。検索も、1 つの URL に 2 言語が同居していると、どちらの言語のページとして出すか決めきれません。
 
@@ -95,10 +95,12 @@ PLATEAU の LOD2 は 1 棟につき 1 枚のテクスチャ画像（512〜2048px
 | 構造化データ（schema.org の `VideoGame`） | 同上。JSON-LD |
 | カード画像 1200x630 | `public/ogp.png`（日本語）/ `public/ogp-en.png`（英語） |
 | サイトマップ | `public/sitemap.xml`。2 言語を hreflang で結んである |
+| 構造化データ（`BreadcrumbList`、`isPartOf`） | 入口サイト citykart.jp の一部であることを示す |
+| 相互リンク | `index.html` の `.sites`。ほかの 2 作と citykart.jp へ |
 
 カード画像は `PORT=5180 node tools/make_ogp.mjs` で作り直せます。原爆ドーム前をゲーム内で撮り、HUD を消してタイトル帯を重ねたものです。文字はブラウザに描かせているので日本語のフォントも崩れません。背景を変えたいときは `QUERY="debug=1&wp=8&cam=0&nofps=1&q=high"` の経由地とカメラを差し替えてください。
 
-**robots.txt は現状読まれません。** クローラが読むのはドメイン直下の `/robots.txt` だけで、プロジェクトページでは `/hiroshima-kart/robots.txt` に置かれるためです。置いてはありますが（独自ドメインに移したときに効きます）、サイトマップは Search Console に直接登録してください。
+**robots.txt と AI のクローラー。** 独自ドメインに移したので `/robots.txt` は読まれます。検索エンジンに加えて、生成AI・AI検索のクローラー (GPTBot、OAI-SearchBot、ClaudeBot、PerplexityBot、Google-Extended、Applebot-Extended、CCBot ほか) も明示的に許可しています。拒否したくなったら `public/robots.txt` のその行を `Disallow: /` に変えてください。サイトマップは Search Console にも登録します (このドメインでの所有権確認が要ります)。
 
 **ドメインを変えるとき。** URL は `index.html` の SEO ブロック、`tools/seo-en.html`、`public/sitemap.xml`、`public/robots.txt` の 4 か所に書いてあります。GitHub Pages で独自ドメインを設定すると `github.io` 側は 301 で転送されるので、リンクの評価は引き継がれます。
 
@@ -227,7 +229,7 @@ npm run dev             # http://localhost:5180/
 
 `main` に push すると GitHub Actions が GitHub Pages へ公開します（`.github/workflows/deploy.yml`）。
 
-公開先: **https://tatsuya1970.github.io/hiroshima-kart/**
+公開先: **https://hiroshima.citykart.jp/**
 
 プロジェクトページはサブパス配信なので `base` が要ります。`vite preview` は `command` が `'serve'` 扱いになり、`command === 'build'` で分岐するとビルド成果物を root で配信してしまって検証にならないため、環境変数で渡しています。
 
