@@ -289,7 +289,7 @@ BASE_PATH=/hiroshima-kart/ npm run preview   # http://127.0.0.1:4173/hiroshima-k
 | C | カメラ切替 |
 | M | ミュート |
 
-アイテム: キノコ（加速）、バナナ（後方に設置）、ミドリこうら（前方に発射・壁で反射）、スター（無敵）。コインを取ると最高速が少し上がります。
+アイテム: ダッシュ（加速）、オイル（後方に設置）、ボール（前方に発射・壁で反射）、むてき（無敵）。コインを取ると最高速が少し上がります。
 
 ### スマホ / タブレット
 
@@ -416,7 +416,7 @@ src/parks.ts      公園の芝・樹木と広島城の内堀 (地形の整地込
 src/net.ts        オンライン対戦 (サーバー無しの P2P, WebRTC) と「対戦待ち」の伝え合い (presence)
 src/i18n.ts       日本語 / 英語の切り替え
 src/kart.ts       カート物理・モデル・AI
-src/items.ts      アイテムボックス・コイン・バナナ・甲羅
+src/items.ts      アイテムボックス・コイン・オイル・ボール
 src/hud.ts        HUD・ミニマップ
 src/audio.ts      WebAudio 効果音
 src/main.ts       シーン構築・レース進行
@@ -430,5 +430,3 @@ src/main.ts       シーン構築・レース進行
 | 3D 都市データ (`public/data/`, `data/`) | CC BY 4.0 — [DATA_LICENSE.md](DATA_LICENSE.md) |
 
 データの出典は国土交通省「3D都市モデル（Project PLATEAU）広島市（2024年度）」です。加工内容の一覧は [DATA_LICENSE.md](DATA_LICENSE.md) にあります。
-
-本作品は任天堂株式会社とは一切関係がなく、同社が承認・後援するものでもありません。
