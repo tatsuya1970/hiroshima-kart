@@ -105,6 +105,8 @@
     /* 絶対配置だと行数が増えたときに .keys と重なるので通常フローに置く */
     #overlay .credit { margin-top: 22px; font-size: 12px; opacity: .6; max-width: 900px; line-height: 1.7; }
     #overlay .credit a { color: inherit; text-decoration: underline; }
+    #overlay .author { margin-top: 10px; font-size: 14px; opacity: .85; }
+    #overlay .author a { color: inherit; text-decoration: underline; }
     #overlay .sites { margin-top: 18px; font-size: 12.5px; opacity: .8; }
     #overlay .sites a { color: #ffd83d; text-decoration: none; border-bottom: 1px solid rgba(255,216,61,.45); }
     #overlay .sites a:hover { border-bottom-color: #ffd83d; }
@@ -166,6 +168,22 @@
     #results { display: none; }
     #results table { margin: 0 auto 20px; border-collapse: collapse; font-size: 20px; }
     #results td { padding: 6px 18px; }
+    /* ゴールタイムのランキング (src/ranking.ts) */
+    #rankBox { margin: 0 auto 18px; max-width: 420px; }
+    #rankBox .rankTitle { font-size: 18px; font-weight: 800; color: #ffd83d; margin-bottom: 6px; }
+    #rankMsg { font-size: 14px; opacity: .85; margin-bottom: 8px; }
+    #rankForm { margin-bottom: 10px; }
+    #rankName { font-size: 17px; padding: 9px 14px; border-radius: 10px; border: 1px solid rgba(255,255,255,.3); background: rgba(255,255,255,.1); color: #fff; width: 160px; text-align: center; }
+    #rankName::placeholder { color: rgba(255,255,255,.45); }
+    #overlay #rankSubmit { font-size: 15px; font-weight: 800; padding: 9px 22px; border-radius: 12px; background: linear-gradient(#ffd83d, #e0a800); color: #222; box-shadow: none; }
+    #overlay #rankSubmit:disabled { opacity: .5; }
+    #rankList { list-style: none; margin: 0; padding: 0; font-size: 15px; }
+    #rankList li { display: flex; gap: 12px; padding: 3px 10px; border-radius: 8px; }
+    #rankList li.mine { background: rgba(255,216,61,.2); color: #ffd83d; font-weight: 800; }
+    #rankList .rk { width: 2em; text-align: right; opacity: .8; }
+    #rankList .nm { flex: 1; text-align: left; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    #rankList .tm { font-variant-numeric: tabular-nums; }
+    #rankEmpty { font-size: 14px; opacity: .7; }
     /* ---- タッチ操作 (スマホ / タブレット) ----
        指を置いたまま隣のボタンへ滑らせても効くよう、#touch は画面全面で触れられ、
        src/input.ts が座標からボタンを引く。ボタンは #pads に置き、安全領域のぶん内側に寄せる。 */
@@ -253,6 +271,13 @@
     <div class="route" data-en-html='Hiroshima Sta. → Kanayama-cho → Hatchobori → Kamiya-cho → A-Bomb Dome → Tokaichi → Tera-machi → Peace Wing → Police HQ → Gov. Bldg. East → Hakushima → Futaba-no-sato → Hiroshima Sta. North → Hiroshima Sta.<br /><span style="opacity:.75;font-size:13px">7.31 km a lap. The racing line follows PLATEAU road data. Hiroden trams run down the middle of the street — touch one and you spin out.</span>'>広島駅 → 銀山町 → 八丁堀 → 紙屋町 → 原爆ドーム前 → 十日市 → 寺町 → エディオンピースウィング → 警察署前 → 合同庁舎東 → 白島 → 二葉の里 → 広島駅北口 → 広島駅<br /><span style="opacity:.75;font-size:13px">1周 7.31km / 走行線は PLATEAU の道路データの上を通ります。道の中央を広島電鉄が走ります（接触するとスピン）</span></div>
     <div id="results">
       <table id="resultTable"></table>
+      <div id="rankBox" style="display:none">
+        <div class="rankTitle" data-en="Ranking">ランキング</div>
+        <div id="rankMsg"></div>
+        <div id="rankForm"><input id="rankName" maxlength="10" placeholder="なまえ" data-en-placeholder="name" /> <button id="rankSubmit" data-en="Submit">登録</button></div>
+        <ol id="rankList"></ol>
+        <div id="rankEmpty" style="display:none" data-en="No records yet">まだ記録がありません</div>
+      </div>
     </div>
     <div id="mainButtons">
       <button id="startBtn" disabled data-en="Loading...">読み込み中...</button>
@@ -327,6 +352,7 @@
     </section>
     <div class="sites" data-en-html='More cities: <a href="https://fukuyama.citykart.jp/en/">Fukuyama Kart</a> ・ <a href="https://matsue.citykart.jp/en/">Matsue Kart</a> — all three at <a href="https://citykart.jp/en/">citykart.jp</a>'>ほかの街を走る: <a href="https://fukuyama.citykart.jp/">福山グランプリ</a> ・ <a href="https://matsue.citykart.jp/">松江グランプリ</a> — 3作の入口は <a href="https://citykart.jp/">citykart.jp</a></div>
     <div class="credit" data-en-html='3D city model: MLIT Project PLATEAU, "3D City Model (Project PLATEAU) Hiroshima City (FY2024)", adapted (<a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noopener">CC BY 4.0</a>) — buildings LOD2 (aerial-photo textures) and LOD1, roads, terrain<br />Hiroden trams, the JR Sanyo Line and the Sanyo Shinkansen run on their real alignments'>3D都市モデル: 国土交通省 PLATEAU「3D都市モデル（Project PLATEAU）広島市（2024年度）」を加工して作成 (<a href="https://creativecommons.org/licenses/by/4.0/deed.ja" target="_blank" rel="noopener">CC BY 4.0</a>) / 建築物 LOD2 (実写テクスチャ)・LOD1・道路・地形を使用<br />広島電鉄・JR山陽本線・山陽新幹線は実在の位置に敷設し、車両が走行します</div>
+    <div class="author" data-en-html='Made by <a href="https://www.takemura-techlab.com/" target="_blank" rel="noopener">Takemura TechLab</a>'>作者 <a href="https://www.takemura-techlab.com/" target="_blank" rel="noopener">Takemura TechLab</a></div>
     <div id="buildInfo"></div>
   </div>
   <div id="glLost"><div id="glLostMsg"></div><button id="glLostBtn"></button></div>
