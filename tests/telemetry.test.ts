@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { TelemetryLog, cleanTelemetry, telemetryKey } from '../workers/turn/worker.js';
 import { browserOf, droppedCount, isErrorRecord, summarize } from '../tools/telemetry_report.mjs';
 import { redactText } from '../workers/turn/redact.js';
-import { isOwnScript } from '../src/telemetry';
+import { glLossSituation, isOwnScript } from '../src/telemetry';
 
 /**
  * Durable Object の storage の代わり (get / put / delete / list の使う範囲だけ)。
@@ -148,6 +148,25 @@ describe('本番の記録のまとめ (tools/telemetry_report.mjs)', () => {
     expect(isErrorRecord({ kind: 'load', event: 'resource' })).toBe(true);
     expect(isErrorRecord({ kind: 'load', event: 'ready' })).toBe(false);
     expect(isErrorRecord({ kind: 'net', event: 'presence' })).toBe(false);
+  });
+  it('裏に回している間の WebGL の喪失は通知せず、件数だけ添える (Issue #3)', () => {
+    const lost = (message: string, extra: Record<string, unknown> = {}) => ({ kind: 'gl', event: 'contextlost', data: { message, mem: 4 }, at: 41000, ...extra });
+    expect(isErrorRecord(lost('background'))).toBe(false);
+    expect(isErrorRecord(lost('visible/loading'))).toBe(true);
+    expect(isErrorRecord(lost('visible/ready'))).toBe(true);
+    expect(summarize([lost('background')])).toEqual({ count: 0, markdown: '' });
+    const r = summarize([lost('visible/loading'), lost('visible/loading', { at: 20000 }), lost('background')]);
+    expect(r.count).toBe(2);
+    expect(r.markdown).toContain("`gl/contextlost: visible/loading` — 2 件");
+    expect(r.markdown).toContain('- 状況: 開いてから 中央値 41 秒 / 端末のメモリ: `4GB` ×2');
+    expect(r.markdown).toContain('裏に回している間の WebGL の喪失 1 件');
+  });
+  it('WebGL の喪失の状況は、裏・読み込み中・走行中に分ける', () => {
+    expect(glLossSituation(true, Infinity, true)).toBe('background');
+    // 裏での喪失は、表に戻った直後に届くことがある
+    expect(glLossSituation(false, 500, true)).toBe('background');
+    expect(glLossSituation(false, 60000, true)).toBe('visible/ready');
+    expect(glLossSituation(false, Infinity, false)).toBe('visible/loading');
   });
   it('UA はブラウザと端末に丸める', () => {
     expect(browserOf('Mozilla/5.0 (iPhone; CPU iPhone OS 17_0) AppleWebKit/605.1.15 Version/17.0 Mobile/15E148 Safari/604.1')).toBe('Safari (スマホ)');

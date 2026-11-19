@@ -5,7 +5,7 @@
 //   node tools/telemetry_report.mjs --site hiroshima --all                # 残っている記録を全部まとめて表示 (手元で見るとき)
 //
 // 環境変数: TELEMETRY_URL (Worker の /telemetry。ページが送る先と同じ)、TELEMETRY_TOKEN (Worker の secret と同じ値)
-// 通知するのは kind が error (例外)・gl (WebGL のコンテキスト喪失) のものと、load のうち resource (読み込み失敗)。
+// 通知するのは kind が error (例外)・gl (WebGL のコンテキスト喪失。裏に回している間のものは除く) のものと、load のうち resource (読み込み失敗)。
 // 読み込み完了までの時間 (load ready) や対戦の記録 (net) は通知せず、末尾に件数だけ添える。
 // 通知する前に Worker の上限を超えて消えた記録があれば、その件数も Issue に書く (droppedCount)。
 // --out のとき、GITHUB_OUTPUT があれば count (通知するエラー・管理用の口の操作・消えた記録の件数) と last (最後の記録の番号) を書く。
@@ -22,8 +22,17 @@ import { redactText } from '../workers/turn/redact.js';
 /** Issue に出す種類の上限 */
 const MAX_GROUPS = 20;
 
-/** 通知の対象か (例外・読み込み失敗・WebGL の喪失) */
+/**
+ * 裏に回している間の WebGL の喪失か (src/telemetry.ts の glLossSituation が 'background' を付ける)。
+ * スマホは裏のタブの GPU を OS が取り上げるので、不具合ではない
+ */
+export function isBackgroundGlLoss(r) {
+  return r.kind === 'gl' && r.data?.message === 'background';
+}
+
+/** 通知の対象か (例外・読み込み失敗・表で起きた WebGL の喪失) */
 export function isErrorRecord(r) {
+  if (isBackgroundGlLoss(r)) return false;
   return r.kind === 'error' || r.kind === 'gl' || (r.kind === 'load' && r.event === 'resource');
 }
 
@@ -107,6 +116,8 @@ export function summarize(records, dropped = 0) {
   const parts = [];
   const ready = others.filter(r => r.kind === 'load' && r.event === 'ready').map(r => Number(r.data?.ms)).filter(Number.isFinite).sort((a, b) => a - b);
   if (ready.length) parts.push(`読み込み完了 ${ready.length} 件 (中央値 ${(ready[Math.floor(ready.length / 2)] / 1000).toFixed(1)} 秒)`);
+  const bgLoss = others.filter(isBackgroundGlLoss).length;
+  if (bgLoss) parts.push(`裏に回している間の WebGL の喪失 ${bgLoss} 件`);
   for (const [event, c] of tally(others.filter(r => r.kind === 'net').map(r => r.event))) parts.push(`net ${code(event, 60)} ${c} 件`);
   if (parts.length) lines.push(`同じ期間のほかの記録: ${parts.join('、')}`);
 
@@ -152,6 +163,15 @@ function errorSection(errors) {
     lines.push(`- パス: ${show(tally(items.map(r => r.path ?? '?')))}`);
     // browserOf は決まった名前しか返さないので、コードにしない
     lines.push(`- ブラウザ: ${show(tally(items.map(r => browserOf(r.ua))), 4, String)}`);
+    if (items[0].kind === 'gl') {
+      // 原因の手がかり: 開いてから何秒で起きたか (読み込み直後ならテクスチャのメモリ不足が濃い)・端末のメモリ
+      const at = items.map(r => Number(r.at)).filter(n => Number.isFinite(n) && n > 0).sort((a, b) => a - b);
+      const mem = tally(items.map(r => r.data?.mem).filter(Number.isFinite).map(n => `${n}GB`));
+      const hints = [];
+      if (at.length) hints.push(`開いてから 中央値 ${(at[Math.floor(at.length / 2)] / 1000).toFixed(0)} 秒`);
+      if (mem.length) hints.push(`端末のメモリ: ${show(mem)}`);
+      if (hints.length) lines.push(`- 状況: ${hints.join(' / ')}`);
+    }
     const where = tally(items.map(r => r.data?.where).filter(Boolean));
     if (where.length) lines.push(`- 場所: ${show(where, 2)}`);
     const stack = items.map(r => r.data?.stack).find(s => typeof s === 'string' && s);

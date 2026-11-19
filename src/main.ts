@@ -18,7 +18,7 @@ import { rng, lerp, clamp, assetUrl, WAYPOINTS, llToXZ } from './geo';
 import { resolveQuality, saveQuality, allPresets, type QualityLevel } from './quality';
 import { t, lang, isJa, setLang, applyDomLang } from './i18n';
 import { fetchJson } from './fetch';
-import { installErrorHandlers, report, reportError, setTelemetryContext } from './telemetry';
+import { glLossSituation, installErrorHandlers, report, reportError, setTelemetryContext } from './telemetry';
 import { storageGet, storageSet } from './storage';
 
 installErrorHandlers();
@@ -160,8 +160,9 @@ async function main() {
   const turnListed = dbg.get('debug') ? false : await turnConfigured();
   if (netConsent) await startNet();
   // 低画質では MSAA も切る (内蔵 GPU では帯域を食う)
+  let loaded = false;   // 読み込みが終わったか (コンテキスト喪失の記録に添える)
   const renderer = new THREE.WebGLRenderer({ canvas, antialias: quality.level !== 'low', powerPreference: 'high-performance' });
-  watchContextLoss(canvas);
+  watchContextLoss(canvas, () => loaded);
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, quality.maxPixelRatio));
   renderer.setSize(window.innerWidth, window.innerHeight);
   renderer.shadowMap.enabled = quality.shadows && !dbg.get('noshadow');
@@ -369,6 +370,7 @@ async function main() {
   }
   const fmt = (t: number) => { const m = Math.floor(t / 60); return `${m}:${(t - m * 60).toFixed(2).padStart(5, '0')}`; };
 
+  loaded = true;
   report('load', 'ready', { ms: Math.round(performance.now()) });
   startBtn.disabled = false;
   startBtn.textContent = t('btn.solo');
@@ -1071,11 +1073,19 @@ function makeHills(terrain: Terrain): THREE.Mesh {
  * 戻らない。テクスチャを全部上げ直すより読み込み直すほうが確実なので、案内を出して
  * 再読み込みしてもらう。ブラウザが自分で戻したときは自動で読み込み直す。
  */
-function watchContextLoss(canvas: HTMLCanvasElement): void {
+function watchContextLoss(canvas: HTMLCanvasElement, isReady: () => boolean): void {
   const box = document.getElementById('glLost');
+  // 裏に回している間の喪失 (スマホでは普通に起きる) を見分けるため、最後に表に戻った時刻を持つ
+  let shownAt = -Infinity;
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) shownAt = performance.now(); });
   canvas.addEventListener('webglcontextlost', e => {
     e.preventDefault();   // 戻せる可能性を残す (これが無いと restored が来ない)
-    report('gl', 'contextlost', {});
+    // 原因の手がかり: 裏か表か・読み込み中か・端末のメモリ (GB。Chrome 系だけ)
+    const mem = (navigator as Navigator & { deviceMemory?: number }).deviceMemory;
+    report('gl', 'contextlost', {
+      message: glLossSituation(document.hidden, performance.now() - shownAt, isReady()),
+      ...(typeof mem === 'number' ? { mem } : {}),
+    });
     if (!box) return;
     document.getElementById('glLostMsg')!.textContent = t('gl.lost');
     const b = document.getElementById('glLostBtn') as HTMLButtonElement;
