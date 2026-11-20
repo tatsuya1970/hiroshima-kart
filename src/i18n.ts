@@ -83,7 +83,7 @@ const JA: Dict = {
   'gl.tip.restartMobile': 'ブラウザを完全に終了して開き直す。直らなければ端末を再起動する。',
   'gl.tip.openInBrowser': 'アプリの中のブラウザで開いているときは、Chrome や Safari で開き直す。',
   'gl.tip.update': 'ブラウザを最新版にする。',
-  'gl.tip.hwAccel': 'ブラウザの設定で「ハードウェア アクセラレーション」(グラフィック アクセラレーション) をオンにして、ブラウザを再起動する。',
+  'gl.tip.hwAccel': 'Chrome・Edge は設定の「グラフィック アクセラレーションが使用可能な場合は使用する」をオンにして、ブラウザを再起動する (ほかのブラウザは「ハードウェア アクセラレーション」の設定)。',
   'gl.tip.driver': 'グラフィックのドライバと OS を最新版にする。',
   'gl.tip.otherBrowser': '別のブラウザ (Chrome・Edge・Firefox・Safari) で開く。',
 
@@ -182,7 +182,7 @@ const EN: Dict = {
   'gl.tip.restartMobile': 'Fully quit and reopen the browser. If that does not help, restart the device.',
   'gl.tip.openInBrowser': 'If you opened this page inside another app, open it in Chrome or Safari instead.',
   'gl.tip.update': 'Update your browser.',
-  'gl.tip.hwAccel': 'Turn on "hardware acceleration" (graphics acceleration) in your browser settings, then restart the browser.',
+  'gl.tip.hwAccel': 'In Chrome or Edge, turn on "Use graphics acceleration when available" in Settings, then restart the browser (other browsers call it "hardware acceleration").',
   'gl.tip.driver': 'Update your graphics driver and OS.',
   'gl.tip.otherBrowser': 'Open the page in another browser (Chrome, Edge, Firefox or Safari).',
 

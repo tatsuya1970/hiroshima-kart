@@ -1072,34 +1072,41 @@ function makeHills(terrain: Terrain): THREE.Mesh {
 }
 
 /**
- * レンダラーを作る。作れないとき (Issue #3。ブラウザが古くて WebGL2 が無い・GPU の不調で
- * ブラウザがこのサイトの WebGL を止めている・メモリが足りない・PC でハードウェア
- * アクセラレーションが切れているなど) は、読み込み直すだけでは直らないことが多いので、
- * 直し方を案内して null を返す。記録は例外 (error/main) と分けて gl/create で送る。
+ * レンダラーを作る。作れないのはこちらの不具合ではなく環境のせい (ブラウザが古くて WebGL2 が
+ * 無い・GPU の不調でブラウザがこのサイトの WebGL を止めている・メモリが足りない・PC で
+ * ハードウェア アクセラレーションが切れているなど) なので、MSAA を切った軽い設定で一度だけ
+ * やり直す。それでも作れなければ、読み込み直すだけでは直らないことが多いので、端末に合った
+ * 直し方を案内して null を返す。記録は通知しない種類 gl/unavailable で、原因の手がかりを添えて送る。
  */
 function createRenderer(canvas: HTMLCanvasElement, antialias: boolean): THREE.WebGLRenderer | null {
   // ブラウザが作れなかった理由を添えてくることがある (Chrome の statusMessage。three.js はコンソールに出すだけ)
   let reason = '';
   const onCreationError = (e: Event) => { reason ||= (e as WebGLContextEvent).statusMessage ?? ''; };
   canvas.addEventListener('webglcontextcreationerror', onCreationError);
-  try {
-    return new THREE.WebGLRenderer({ canvas, antialias, powerPreference: 'high-performance' });
-  } catch (e) {
-    console.error(e);
-    const webgl2Api = typeof WebGL2RenderingContext !== 'undefined';
-    const mem = deviceMemory();
-    report('gl', 'create', {
-      message: (reason || (e instanceof Error ? e.message : String(e))).slice(0, 300),
-      webgl2Api,
-      webgl1: canCreateWebGL1(),
-      ...(mem !== undefined ? { mem } : {}),
-    });
-    const tips = glUnavailableTips({ webgl2Api, mobile: matchMedia('(pointer: coarse)').matches, inApp: inAppBrowser() !== '' });
-    showGlBox(t('gl.unavailable'), tips.map(k => t(k)));
-    return null;
-  } finally {
-    canvas.removeEventListener('webglcontextcreationerror', onCreationError);
+  let renderer: THREE.WebGLRenderer | null = null;
+  let error: unknown;
+  for (const opts of [{ antialias, powerPreference: 'high-performance' as const }, { antialias: false }]) {
+    try {
+      renderer = new THREE.WebGLRenderer({ canvas, ...opts });
+      break;
+    } catch (e) {
+      error = e;
+    }
   }
+  canvas.removeEventListener('webglcontextcreationerror', onCreationError);
+  if (renderer) return renderer;
+  console.error(error);
+  const webgl2Api = typeof WebGL2RenderingContext !== 'undefined';
+  const mem = deviceMemory();
+  report('gl', 'unavailable', {
+    message: (reason || (error instanceof Error ? error.message : String(error))).slice(0, 300),
+    webgl2Api,
+    webgl1: canCreateWebGL1(),
+    ...(mem !== undefined ? { mem } : {}),
+  });
+  const tips = glUnavailableTips({ webgl2Api, mobile: matchMedia('(pointer: coarse)').matches, inApp: inAppBrowser() !== '' });
+  showGlBox(t('gl.unavailable'), tips.map(k => t(k)));
+  return null;
 }
 
 /** WebGL の案内 (#glLost) を画面いっぱいに出す。tips は箇条書きにする。ボタンは読み込み直し */

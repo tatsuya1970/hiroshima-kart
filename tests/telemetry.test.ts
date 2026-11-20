@@ -147,6 +147,7 @@ describe('本番の記録のまとめ (tools/telemetry_report.mjs)', () => {
   it('通知するのは例外・読み込み失敗・WebGL の喪失', () => {
     expect(isErrorRecord({ kind: 'error', event: 'main' })).toBe(true);
     expect(isErrorRecord({ kind: 'gl', event: 'contextlost' })).toBe(true);
+    expect(isErrorRecord({ kind: 'gl', event: 'unavailable' })).toBe(false);
     expect(isErrorRecord({ kind: 'load', event: 'resource' })).toBe(true);
     expect(isErrorRecord({ kind: 'load', event: 'ready' })).toBe(false);
     expect(isErrorRecord({ kind: 'net', event: 'presence' })).toBe(false);
@@ -163,23 +164,22 @@ describe('本番の記録のまとめ (tools/telemetry_report.mjs)', () => {
     expect(r.markdown).toContain('- 状況: 開いてから 中央値 41 秒 / 端末のメモリ: `4GB` ×2');
     expect(r.markdown).toContain('裏に回している間の WebGL の喪失 1 件');
   });
-  it('WebGL を作れなかった記録は、理由ごとにまとめて WebGL1・WebGL2 の可否を添える (Issue #3)', () => {
-    const fail = (message: string, data: Record<string, unknown>) => ({ kind: 'gl', event: 'create', data: { message, ...data }, at: 900 });
+  it('WebGL が使えない環境は通知せず、ほかの記録に理由と WebGL1・WebGL2 の可否の内訳を添える (Issue #3)', () => {
+    const fail = (message: string, data: Record<string, unknown>) => ({ kind: 'gl', event: 'unavailable', data: { message, ...data }, at: 900 });
     const blocked = 'Web page caused context loss and was blocked';
-    const r = summarize([
+    const noGl = [
       fail(blocked, { webgl2Api: true, webgl1: false, mem: 4 }),
       fail(blocked, { webgl2Api: true, webgl1: true, mem: 4 }),
       fail('Error creating WebGL context.', { webgl2Api: false, webgl1: true }),
-    ]);
-    expect(r.count).toBe(3);
-    expect(r.markdown).toContain(`\`gl/create: ${blocked}\` — 2 件`);
-    expect(r.markdown).toContain('- 状況: WebGL2 の API: あり ×2 / WebGL1: 作れない, 作れた / 端末のメモリ: `4GB` ×2');
-    expect(r.markdown).toContain('- 状況: WebGL2 の API: 無し / WebGL1: 作れた');
-    // 開いてからの秒数は喪失のときだけ (作れなかったのは読み込みの最初なので意味が無い)
-    expect(r.markdown).not.toContain('開いてから');
-    // 真偽値でないもの (改造したページから) は、決まった言葉にならないので出さない
-    const odd = summarize([fail('x', { webgl2Api: '[link](https://example.com)', webgl1: 1 })]);
-    expect(odd.markdown).not.toContain('- 状況');
+    ];
+    expect(summarize(noGl)).toEqual({ count: 0, markdown: '' });
+    const r = summarize([uncaught('TypeError: a is undefined'), ...noGl]);
+    expect(r.count).toBe(1);
+    expect(r.markdown).not.toContain('gl/unavailable');
+    expect(r.markdown).toContain(`WebGL が使えない環境 3 件 (理由: \`${blocked}\` ×2, \`Error creating WebGL context.\` / WebGL1 なら作れた 2 件 / WebGL2 の API が無い 1 件)`);
+    // 真偽値でないもの (改造したページから) は数えない。理由はコードとして載せる
+    const odd = summarize([uncaught('x'), fail('[link](https://example.com)', { webgl2Api: 'false', webgl1: 1 })]);
+    expect(odd.markdown).toContain('WebGL が使えない環境 1 件 (理由: `[link](https://example.com)`)');
   });
   it('WebGL を作れなかったときの直し方は、古いブラウザ・スマホ・PC で変える', () => {
     expect(glUnavailableTips({ webgl2Api: false, mobile: true, inApp: false })).toEqual(['gl.tip.oldBrowser']);
@@ -216,6 +216,7 @@ describe('本番の記録のまとめ (tools/telemetry_report.mjs)', () => {
       { kind: 'load', event: 'ready', data: { ms: 8000 } },
       { kind: 'load', event: 'ready', data: { ms: 4000 } },
       { kind: 'net', event: 'presence', data: { others: 1 } },
+      { kind: 'gl', event: 'unavailable', data: { message: 'Error creating WebGL context.' } },
     ];
     const { count, markdown } = summarize(records);
     expect(count).toBe(4);
@@ -226,7 +227,7 @@ describe('本番の記録のまとめ (tools/telemetry_report.mjs)', () => {
     expect(markdown).toContain('ブラウザ: Chrome (PC), Safari (スマホ)');
     expect(markdown).toContain('画質: `high`, `low`');
     expect(markdown).toContain('```\nTypeError: a is undefined\n    at x (a.js:1:2)\n```');
-    expect(markdown).toContain('読み込み完了 2 件 (中央値 8.0 秒)、net `presence` 1 件');
+    expect(markdown).toContain('読み込み完了 2 件 (中央値 8.0 秒)、net `presence` 1 件、WebGL が使えない環境 1 件');
     expect(markdown).not.toContain('Mozilla');
   });
   it('利用者から来た値はコードとして載せ、リンク・@メンション・見出しにさせない (記録は誰でも送れる)', () => {
