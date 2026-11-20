@@ -1,9 +1,11 @@
+import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 // Worker と tools/ は JavaScript (型定義なし)。vitest は型を検査しないのでそのまま読める
 import { TelemetryLog, cleanTelemetry, telemetryKey } from '../workers/turn/worker.js';
 import { browserOf, droppedCount, isErrorRecord, summarize } from '../tools/telemetry_report.mjs';
 import { redactText } from '../workers/turn/redact.js';
 import { glLossSituation, isOwnScript } from '../src/telemetry';
+import { glUnavailableTips } from '../src/gl';
 
 /**
  * Durable Object の storage の代わり (get / put / delete / list の使う範囲だけ)。
@@ -160,6 +162,37 @@ describe('本番の記録のまとめ (tools/telemetry_report.mjs)', () => {
     expect(r.markdown).toContain("`gl/contextlost: visible/loading` — 2 件");
     expect(r.markdown).toContain('- 状況: 開いてから 中央値 41 秒 / 端末のメモリ: `4GB` ×2');
     expect(r.markdown).toContain('裏に回している間の WebGL の喪失 1 件');
+  });
+  it('WebGL を作れなかった記録は、理由ごとにまとめて WebGL1・WebGL2 の可否を添える (Issue #3)', () => {
+    const fail = (message: string, data: Record<string, unknown>) => ({ kind: 'gl', event: 'create', data: { message, ...data }, at: 900 });
+    const blocked = 'Web page caused context loss and was blocked';
+    const r = summarize([
+      fail(blocked, { webgl2Api: true, webgl1: false, mem: 4 }),
+      fail(blocked, { webgl2Api: true, webgl1: true, mem: 4 }),
+      fail('Error creating WebGL context.', { webgl2Api: false, webgl1: true }),
+    ]);
+    expect(r.count).toBe(3);
+    expect(r.markdown).toContain(`\`gl/create: ${blocked}\` — 2 件`);
+    expect(r.markdown).toContain('- 状況: WebGL2 の API: あり ×2 / WebGL1: 作れない, 作れた / 端末のメモリ: `4GB` ×2');
+    expect(r.markdown).toContain('- 状況: WebGL2 の API: 無し / WebGL1: 作れた');
+    // 開いてからの秒数は喪失のときだけ (作れなかったのは読み込みの最初なので意味が無い)
+    expect(r.markdown).not.toContain('開いてから');
+    // 真偽値でないもの (改造したページから) は、決まった言葉にならないので出さない
+    const odd = summarize([fail('x', { webgl2Api: '[link](https://example.com)', webgl1: 1 })]);
+    expect(odd.markdown).not.toContain('- 状況');
+  });
+  it('WebGL を作れなかったときの直し方は、古いブラウザ・スマホ・PC で変える', () => {
+    expect(glUnavailableTips({ webgl2Api: false, mobile: true, inApp: false })).toEqual(['gl.tip.oldBrowser']);
+    expect(glUnavailableTips({ webgl2Api: true, mobile: true, inApp: false })).toEqual(['gl.tip.closeApps', 'gl.tip.restartMobile', 'gl.tip.update']);
+    expect(glUnavailableTips({ webgl2Api: true, mobile: true, inApp: true })).toEqual(['gl.tip.closeApps', 'gl.tip.restartMobile', 'gl.tip.openInBrowser']);
+    expect(glUnavailableTips({ webgl2Api: true, mobile: false, inApp: false })).toEqual(['gl.tip.hwAccel', 'gl.tip.driver', 'gl.tip.otherBrowser']);
+    // どの案内も日本語と英語の両方がある (i18n.ts は読み込むと location を見るので、ソースの文で確かめる)
+    const dict = readFileSync(new URL('../src/i18n.ts', import.meta.url), 'utf8');
+    for (const env of [{ webgl2Api: false, mobile: false, inApp: false }, { webgl2Api: true, mobile: true, inApp: true }, { webgl2Api: true, mobile: true, inApp: false }, { webgl2Api: true, mobile: false, inApp: false }]) {
+      for (const key of [...glUnavailableTips(env), 'gl.unavailable']) {
+        expect(dict.split(`'${key}': '`).length - 1, key).toBe(2);
+      }
+    }
   });
   it('WebGL の喪失の状況は、裏・読み込み中・走行中に分ける', () => {
     expect(glLossSituation(true, Infinity, true)).toBe('background');

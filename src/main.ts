@@ -20,6 +20,7 @@ import { t, lang, isJa, setLang, applyDomLang } from './i18n';
 import { fetchJson } from './fetch';
 import { glLossSituation, installErrorHandlers, report, reportError, setTelemetryContext } from './telemetry';
 import { storageGet, storageSet } from './storage';
+import { canCreateWebGL1, deviceMemory, glUnavailableTips } from './gl';
 
 installErrorHandlers();
 // 本体が動き出した印。index.html の起動の見張りが、これが立たないまま時間が過ぎると案内を出す
@@ -119,6 +120,13 @@ async function main() {
   // どの版が動いているかを隅に出しておく (vite.config.ts の define)
   const buildInfo = document.getElementById('buildInfo');
   if (buildInfo) buildInfo.textContent = `build ${__BUILD__.commit} (${new Date(__BUILD__.time).toLocaleString()})`;
+  // WebGL は最初に作る。作れない端末では案内を出して止め、対戦待ちにも入らない (入ると相手から見えてしまう)
+  // 低画質では MSAA も切る (内蔵 GPU では帯域を食う)
+  const created = createRenderer(canvas, quality.level !== 'low');
+  if (!created) return;
+  const renderer = created;   // 中で宣言している関数からも null でない型で見えるように
+  let loaded = false;   // 読み込みが終わったか (コンテキスト喪失の記録に添える)
+  watchContextLoss(canvas, () => loaded);
   // トップ画面の「対戦待ち」表示と対戦は、公開リレー (nostr) を通じて他のプレイヤーの
   // ブラウザと直接つなぐ。つなぐと IP アドレスが相手・リレーの運営者・STUN / TURN の
   // サーバーに伝わるので、利用者が許可するまで (「対戦待ちの人を表示する」か対戦PLAY を
@@ -159,10 +167,6 @@ async function main() {
   // 対戦PLAY を出せるか (TURN があるか) は、許可の前でも同じサイトの turn.json だけで見当がつく
   const turnListed = dbg.get('debug') ? false : await turnConfigured();
   if (netConsent) await startNet();
-  // 低画質では MSAA も切る (内蔵 GPU では帯域を食う)
-  let loaded = false;   // 読み込みが終わったか (コンテキスト喪失の記録に添える)
-  const renderer = new THREE.WebGLRenderer({ canvas, antialias: quality.level !== 'low', powerPreference: 'high-performance' });
-  watchContextLoss(canvas, () => loaded);
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, quality.maxPixelRatio));
   renderer.setSize(window.innerWidth, window.innerHeight);
   renderer.shadowMap.enabled = quality.shadows && !dbg.get('noshadow');
@@ -1068,30 +1072,78 @@ function makeHills(terrain: Terrain): THREE.Mesh {
 }
 
 /**
+ * レンダラーを作る。作れないとき (Issue #3。ブラウザが古くて WebGL2 が無い・GPU の不調で
+ * ブラウザがこのサイトの WebGL を止めている・メモリが足りない・PC でハードウェア
+ * アクセラレーションが切れているなど) は、読み込み直すだけでは直らないことが多いので、
+ * 直し方を案内して null を返す。記録は例外 (error/main) と分けて gl/create で送る。
+ */
+function createRenderer(canvas: HTMLCanvasElement, antialias: boolean): THREE.WebGLRenderer | null {
+  // ブラウザが作れなかった理由を添えてくることがある (Chrome の statusMessage。three.js はコンソールに出すだけ)
+  let reason = '';
+  const onCreationError = (e: Event) => { reason ||= (e as WebGLContextEvent).statusMessage ?? ''; };
+  canvas.addEventListener('webglcontextcreationerror', onCreationError);
+  try {
+    return new THREE.WebGLRenderer({ canvas, antialias, powerPreference: 'high-performance' });
+  } catch (e) {
+    console.error(e);
+    const webgl2Api = typeof WebGL2RenderingContext !== 'undefined';
+    const mem = deviceMemory();
+    report('gl', 'create', {
+      message: (reason || (e instanceof Error ? e.message : String(e))).slice(0, 300),
+      webgl2Api,
+      webgl1: canCreateWebGL1(),
+      ...(mem !== undefined ? { mem } : {}),
+    });
+    const tips = glUnavailableTips({ webgl2Api, mobile: matchMedia('(pointer: coarse)').matches, inApp: inAppBrowser() !== '' });
+    showGlBox(t('gl.unavailable'), tips.map(k => t(k)));
+    return null;
+  } finally {
+    canvas.removeEventListener('webglcontextcreationerror', onCreationError);
+  }
+}
+
+/** WebGL の案内 (#glLost) を画面いっぱいに出す。tips は箇条書きにする。ボタンは読み込み直し */
+function showGlBox(lead: string, tips: string[] = []): void {
+  const box = document.getElementById('glLost');
+  if (!box) return;
+  const p = document.createElement('p');
+  p.textContent = lead;
+  const msg = document.getElementById('glLostMsg')!;
+  msg.replaceChildren(p);
+  if (tips.length) {
+    const ul = document.createElement('ul');
+    for (const tip of tips) {
+      const li = document.createElement('li');
+      li.textContent = tip;
+      ul.appendChild(li);
+    }
+    msg.appendChild(ul);
+  }
+  const b = document.getElementById('glLostBtn') as HTMLButtonElement;
+  b.textContent = t('gl.reload');
+  b.onclick = () => location.reload();
+  box.style.display = 'flex';
+}
+
+/**
  * WebGL のコンテキストが失われたとき (GPU のメモリ不足・ドライバのリセット・モバイルで
  * 裏に回したときなど)。three.js はそのまま描画を止めるので、放っておくと黒い画面のまま
  * 戻らない。テクスチャを全部上げ直すより読み込み直すほうが確実なので、案内を出して
  * 再読み込みしてもらう。ブラウザが自分で戻したときは自動で読み込み直す。
  */
 function watchContextLoss(canvas: HTMLCanvasElement, isReady: () => boolean): void {
-  const box = document.getElementById('glLost');
   // 裏に回している間の喪失 (スマホでは普通に起きる) を見分けるため、最後に表に戻った時刻を持つ
   let shownAt = -Infinity;
   document.addEventListener('visibilitychange', () => { if (!document.hidden) shownAt = performance.now(); });
   canvas.addEventListener('webglcontextlost', e => {
     e.preventDefault();   // 戻せる可能性を残す (これが無いと restored が来ない)
     // 原因の手がかり: 裏か表か・読み込み中か・端末のメモリ (GB。Chrome 系だけ)
-    const mem = (navigator as Navigator & { deviceMemory?: number }).deviceMemory;
+    const mem = deviceMemory();
     report('gl', 'contextlost', {
       message: glLossSituation(document.hidden, performance.now() - shownAt, isReady()),
-      ...(typeof mem === 'number' ? { mem } : {}),
+      ...(mem !== undefined ? { mem } : {}),
     });
-    if (!box) return;
-    document.getElementById('glLostMsg')!.textContent = t('gl.lost');
-    const b = document.getElementById('glLostBtn') as HTMLButtonElement;
-    b.textContent = t('gl.reload');
-    b.onclick = () => location.reload();
-    box.style.display = 'flex';
+    showGlBox(t('gl.lost'));
   });
   canvas.addEventListener('webglcontextrestored', () => location.reload());
 }

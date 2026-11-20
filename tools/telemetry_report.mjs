@@ -163,15 +163,7 @@ function errorSection(errors) {
     lines.push(`- パス: ${show(tally(items.map(r => r.path ?? '?')))}`);
     // browserOf は決まった名前しか返さないので、コードにしない
     lines.push(`- ブラウザ: ${show(tally(items.map(r => browserOf(r.ua))), 4, String)}`);
-    if (items[0].kind === 'gl') {
-      // 原因の手がかり: 開いてから何秒で起きたか (読み込み直後ならテクスチャのメモリ不足が濃い)・端末のメモリ
-      const at = items.map(r => Number(r.at)).filter(n => Number.isFinite(n) && n > 0).sort((a, b) => a - b);
-      const mem = tally(items.map(r => r.data?.mem).filter(Number.isFinite).map(n => `${n}GB`));
-      const hints = [];
-      if (at.length) hints.push(`開いてから 中央値 ${(at[Math.floor(at.length / 2)] / 1000).toFixed(0)} 秒`);
-      if (mem.length) hints.push(`端末のメモリ: ${show(mem)}`);
-      if (hints.length) lines.push(`- 状況: ${hints.join(' / ')}`);
-    }
+    if (items[0].kind === 'gl') lines.push(...glHints(items));
     const where = tally(items.map(r => r.data?.where).filter(Boolean));
     if (where.length) lines.push(`- 場所: ${show(where, 2)}`);
     const stack = items.map(r => r.data?.stack).find(s => typeof s === 'string' && s);
@@ -180,6 +172,28 @@ function errorSection(errors) {
   });
   if (sorted.length > MAX_GROUPS) lines.push(`(ほか ${sorted.length - MAX_GROUPS} 種類)`, '');
   return lines;
+}
+
+/** WebGL の記録 (同じ event のまとまり) に添える原因の手がかり。無ければ空 */
+function glHints(items) {
+  const hints = [];
+  if (items[0].event === 'contextlost') {
+    // 開いてから何秒で起きたか (読み込み直後ならテクスチャのメモリ不足が濃い)
+    const at = items.map(r => Number(r.at)).filter(n => Number.isFinite(n) && n > 0).sort((a, b) => a - b);
+    if (at.length) hints.push(`開いてから 中央値 ${(at[Math.floor(at.length / 2)] / 1000).toFixed(0)} 秒`);
+  }
+  if (items[0].event === 'create') {
+    // 作れなかったとき (src/main.ts の createRenderer): WebGL2 の API が無ければブラウザが古い。
+    // WebGL1 なら作れたなら、端末かブラウザが WebGL2 だけを止めている。どちらも決まった言葉にして出す
+    const yesNo = (key, yes, no) => tally(items.map(r => r.data?.[key]).filter(v => typeof v === 'boolean').map(v => (v ? yes : no)));
+    const api = yesNo('webgl2Api', 'あり', '無し');
+    const gl1 = yesNo('webgl1', '作れた', '作れない');
+    if (api.length) hints.push(`WebGL2 の API: ${show(api, 2, String)}`);
+    if (gl1.length) hints.push(`WebGL1: ${show(gl1, 2, String)}`);
+  }
+  const mem = tally(items.map(r => r.data?.mem).filter(Number.isFinite).map(n => `${n}GB`));
+  if (mem.length) hints.push(`端末のメモリ: ${show(mem)}`);
+  return hints.length ? [`- 状況: ${hints.join(' / ')}`] : [];
 }
 
 async function main() {
